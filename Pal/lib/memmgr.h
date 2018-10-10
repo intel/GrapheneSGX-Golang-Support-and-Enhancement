@@ -263,7 +263,7 @@ static inline void free_mem_obj_to_mgr (MEM_MGR mgr, OBJ_TYPE * obj)
 
     if (found) {
         INIT_LIST_HEAD(mobj, __list);
-        LISTP_ADD_TAIL(mobj, &mgr->free_list, __list);
+        LISTP_ADD(mobj, &mgr->free_list, __list);
         CHECK_LIST_HEAD(MEM_OBJ, &mgr->free_list, __list);
     }
 
