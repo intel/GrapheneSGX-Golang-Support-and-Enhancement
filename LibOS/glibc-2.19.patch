@@ -1302,6 +1302,20 @@ index d3b450a..75a63e1 100644
  
  	/* Push back the return PC.  */
  	pushq	%rdi
+diff --git a/sysdeps/x86_64/dl-machine.h b/sysdeps/x86_64/dl-machine.h
+index 504c95f..dcfc259 100644
+--- a/sysdeps/x86_64/dl-machine.h
++++ b/sysdeps/x86_64/dl-machine.h
+@@ -529,7 +529,8 @@ elf_machine_lazy_rel (struct link_map *map,
+ 	value = ((ElfW(Addr) (*) (void)) value) ();
+       *reloc_addr = value;
+     }
+-  else
++  /* for graphene, get around R_X86_64_NONE */
++  else if (__builtin_expect (r_type != R_X86_64_NONE, 1))
+     _dl_reloc_bad_type (map, r_type, 1);
+ }
+ 
 diff --git a/sysdeps/x86_64/hp-timing.h b/sysdeps/x86_64/hp-timing.h
 index d88206c..886c500 100644
 --- a/sysdeps/x86_64/hp-timing.h
