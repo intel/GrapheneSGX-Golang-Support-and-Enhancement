@@ -364,8 +364,8 @@ get_cp_map_entry (void * map, void * addr, bool create);
             return ret;                                                 \
     } while (0)
 
-#define DEBUG_RESUME      0
-#define DEBUG_CHECKPOINT  0
+#define DEBUG_RESUME      1
+#define DEBUG_CHECKPOINT  1
 
 #if DEBUG_RESUME == 1
 # define DEBUG_RS(fmt, ...)                                              \
