@@ -79,7 +79,8 @@ void debug_vprintf (const char * fmt, va_list ap) __attribute__((format (printf,
 #define debug(fmt, ...)                                                     \
     do {                                                                    \
         if (debug_handle)                                                   \
-            debug_printf(fmt, ##__VA_ARGS__);                               \
+            debug_printf("%s:%d:%s " fmt, __FILE__, __LINE__, __func__,     \
+                         ##__VA_ARGS__);                                    \
     } while (0)
 
 /* print system messages */
