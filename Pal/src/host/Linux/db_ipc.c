@@ -20,6 +20,8 @@
  * This file contains APIs for physical memory bulk copy across processes.
  */
 
+#include <bits/types/struct_iovec.h>
+
 #include "pal_defs.h"
 #include "pal_linux_defs.h"
 #include "pal.h"
@@ -144,8 +146,9 @@ int _DkPhysicalMemoryCommit (PAL_HANDLE channel, int entries,
     return ret;
 }
 
-int _DkPhysicalMemoryMap (PAL_HANDLE channel, int entries,
-                          PAL_PTR * addrs, PAL_NUM * sizes, PAL_FLG * prots)
+static int _DkPhysicalMemoryMapGipc (
+    PAL_HANDLE channel, int entries,
+    PAL_PTR * addrs, PAL_NUM * sizes, PAL_FLG * prots)
 {
     int fd = channel->gipc.fd;
     struct gipc_recv gr;
@@ -173,4 +176,69 @@ int _DkPhysicalMemoryMap (PAL_HANDLE channel, int entries,
         addrs[i] = (PAL_PTR) gr.addr[i];
 
     return ret;
+}
+
+static int _DkPhysicalMemoryMapCma (
+    PAL_HANDLE channel, int entries,
+    PAL_PTR * addrs, PAL_NUM * sizes, PAL_FLG * prots)
+{
+    PAL_IDX pid = channel->process.pid;
+    struct iovec * iov = __alloca(sizeof(*iov) * entries);
+    ssize_t size = 0;
+    int i;
+    int ret;
+
+    for (i = 0; i < entries; i++) {
+        if (!sizes[i] || !ALLOC_ALIGNED(addrs[i]) || !ALLOC_ALIGNED(sizes[i]))
+            return -PAL_ERROR_INVAL;
+
+        iov[i].iov_base = addrs[i];
+        // TODO: check sizes[i] is in size_t as PAL_NUM=uintptr_t.
+        iov[i].iov_len = sizes[i];
+        size += sizes[i];
+
+        void *addr = addrs[i];
+        ret = _DkVirtualMemoryAlloc(
+            &addr, sizes[i], 0, prots[i] | PAL_PROT_WRITE);
+        if (ret < 0) {
+            printf("failed allocating %p-%p\n", addrs[i], addrs[i] + sizes[i]);
+            return ret;
+        }
+        if (addr != addrs[i])
+            return -PAL_ERROR_BADADDR;
+    }
+
+    ret = INLINE_SYSCALL(process_vm_readv, 6, pid, iov, entries, iov, entries, 0);
+    if (IS_ERR(ret)) {
+        printf("process_vm_readv failure: %d\n", ret);
+        return unix_to_pal_error(ERRNO(ret));
+    }
+    if (ret != size) {
+        printf("process_vm_readv failure: ret: %d size: %ld\n", ret, size);
+        return PAL_ERROR_INVAL;
+    }
+
+    for (i = 0; i < entries; i++) {
+        if ((prots[i] & PAL_PROT_WRITE) == 0) {
+            if (_DkVirtualMemoryProtect(addrs[i], sizes[i], prots[i]) < 0) {
+                printf("ignoring failure: failed protect %p-%p\n",
+                       addrs[i], addrs[i] + sizes[i]);
+            }
+        }
+    }
+    return ret;
+}
+
+int _DkPhysicalMemoryMap (PAL_HANDLE channel, int entries,
+                          PAL_PTR * addrs, PAL_NUM * sizes, PAL_FLG * prots)
+{
+    switch (HANDLE_HDR(channel)->type) {
+    case pal_type_gipc:
+        return _DkPhysicalMemoryMapGipc(channel, entries, addrs, sizes, prots);
+    case pal_type_process:
+        return _DkPhysicalMemoryMapCma(channel, entries, addrs, sizes, prots);
+    default:
+        return -PAL_ERROR_NOTIMPLEMENTED;
+    }
+    return -PAL_ERROR_NOTIMPLEMENTED;
 }
