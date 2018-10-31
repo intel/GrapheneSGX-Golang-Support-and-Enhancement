@@ -57,7 +57,10 @@ $(executables):
 endif
 
 .PHONY: test
-test:
+test: $(target) pal_loader
+	for f in $(executables); do \
+		env PYTHONPATH=$$PYTHONPATH:$(CURDIR)/../../Scripts $(CURDIR)/runner.py $(CURDIR)/pal_loader $${f}; \
+	done
 
 .PHONY: clean
 clean:
