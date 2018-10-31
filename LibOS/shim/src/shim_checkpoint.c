@@ -568,7 +568,6 @@ static int send_checkpoint_on_stream (PAL_HANDLE stream,
 static int send_checkpoint_by_cma (PAL_HANDLE stream,
                                    struct shim_cp_store * store)
 {
-#if 0
     int cma_nentries = store->cma_nentries;
     struct shim_cma_entry ** cma_entries;
 
@@ -594,7 +593,6 @@ static int send_checkpoint_by_cma (PAL_HANDLE stream,
             return ret;
         }
     }
-#endif
 
     return send_checkpoint_on_stream(stream, store);
     /* TODO: fix up protection * if (!(mem_entries[i]->prot & PAL_PROT_READ))
