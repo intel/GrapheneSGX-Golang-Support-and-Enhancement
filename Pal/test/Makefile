@@ -56,6 +56,9 @@ else
 $(executables):
 endif
 
+.PHONY: test
+test:
+
 .PHONY: clean
 clean:
 	rm -rf pal_loader $(call expand_target,$(target)) .lib *.cached

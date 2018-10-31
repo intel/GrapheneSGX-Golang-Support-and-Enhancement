@@ -56,7 +56,7 @@ kernel_install:
 endif
 
 .PHONY: test
-test:
+test: all
 	$(MAKE) -C test test
 
 .PHONY: format
@@ -68,6 +68,10 @@ format:
 	                               -path ./src/security/Linux/bpf-helper.h -prune -o \
 	                               -path ./src/security/Linux/bpf_helper.c -prune -o \
 	                               \( -name '*.h' -o -name '*.c' \) -print)
+
+.PHONY: regression
+regression: all
+	$(MAKE) -C regression regression
 
 .PHONY: pack
 pack:

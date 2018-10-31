@@ -10,3 +10,6 @@ format:
 
 .PHONY: pack
 pack:
+
+.PHONY: regression
+regression:

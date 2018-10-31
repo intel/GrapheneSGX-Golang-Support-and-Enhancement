@@ -27,9 +27,9 @@ GLIBC_LIBS = \
 GLIBC_TARGET = $(addprefix $(BUILD_DIR)/, $(GLIBC_LIBS))
 GLIBC_RUNTIME = $(addprefix $(RUNTIME_DIR)/, $(notdir $(GLIBC_TARGET)))
 
-.PHONY: all
-all: $(GLIBC_TARGET) $(GLIBC_RUNTIME)
-	$(MAKE) -C $(SHIM_DIR) all
+.PHONY: all regression
+all regression: $(GLIBC_TARGET) $(GLIBC_RUNTIME)
+	$(MAKE) -C $(SHIM_DIR) $@
 
 include ../Makefile.rules
 

@@ -16,3 +16,7 @@ $(targets):
 .PHONY: format
 format:
 	clang-format -i $(shell find . -path ./test/apps -prune -o \( -name '*.h' -o -name '*.c' \) -print)
+
+.PHONY: regression
+regression: all
+	make $@ -C test/regression
