@@ -588,7 +588,7 @@ static int send_checkpoint_by_cma (PAL_HANDLE stream,
         }
 
         /* TODO should copy memory to avoid race between fork and copy? */
-        int ret = DkPhysicalMemoryCommit(stream, cma_nentries, addrs, sizes, 0);
+        int ret = DkPhysicalMemoryCommit(stream, cma_nentries, addrs, sizes);
         if (ret < 0) {
             debug("cma: DkPhysicalMemoryCommit failed. ret %d\n", ret);
             return ret;
