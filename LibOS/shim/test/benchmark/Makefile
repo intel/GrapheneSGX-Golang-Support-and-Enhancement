@@ -27,3 +27,10 @@ else
 .IGNORE: $(c_executables) $(cxx_executables)
 $(c_executables) $(cxx_executables):
 endif
+
+.PHONY: test
+test: all
+	@for f in $(c_executables) $(cxx_executables); do \
+		echo ==== running $$f ====; \
+		./$(PAL_LOADER) $$f; \
+	done
