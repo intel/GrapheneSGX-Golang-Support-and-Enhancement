@@ -296,6 +296,7 @@ DkProcessSandboxCreate (PAL_STR manifest, PAL_FLG flags);
 /* Stream Option Flags */
 #define PAL_OPTION_NONBLOCK     04000
 #define PAL_OPTION_MASK         04000
+#define PAL_OPTION_SPLICE_GIFT  0x08    /* = SPLICE_F_GIFT */
 
 #define WITHIN_MASK(val, mask)  (((val)|(mask)) == (mask))
 

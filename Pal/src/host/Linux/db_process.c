@@ -524,11 +524,21 @@ static int64_t proc_read (PAL_HANDLE handle, uint64_t offset, uint64_t count,
 static int64_t proc_write (PAL_HANDLE handle, uint64_t offset, uint64_t count,
                        const void * buffer)
 {
-    if (offset)
-        return -PAL_ERROR_INVAL;
+    int64_t bytes;
+    if (offset & PAL_OPTION_SPLICE_GIFT) {
+        struct iovec iov = {
+            .iov_base = (void*)buffer,
+            .iov_len = count
+        };
+        bytes = INLINE_SYSCALL(vmsplice, 4, handle->process.stream_out,
+                               &iov, 1, offset & PAL_OPTION_SPLICE_GIFT);
+    } else {
+        if (offset)
+            return -PAL_ERROR_INVAL;
 
-    int64_t bytes = INLINE_SYSCALL(write, 3, handle->process.stream_out, buffer,
-                                   count);
+        bytes = INLINE_SYSCALL(write, 3, handle->process.stream_out, buffer,
+                               count);
+    }
 
     if (IS_ERR(bytes))
         switch(ERRNO(bytes)) {
