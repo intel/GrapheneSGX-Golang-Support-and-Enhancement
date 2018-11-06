@@ -72,7 +72,11 @@ GLIBC_PATCHES = \
 	glibc-syscalldb-api.patch \
 	glibc-fix-warning.patch \
 	glibc-no-pie.patch \
-	glibc-liblibos.patch
+	glibc-liblibos.patch \
+	01-glibc-gettimeofday.patch \
+	02-glibc-sched-getscpu-S.patch \
+	03-glibc-time-c.patch \
+	04-pthread-cond-timedwait-S.patch
 
 ifneq ($(filter %.gold,$(shell readlink -f /usr/bin/ld)),)
 GLIBC_PATCHES += glibc-ld.gold.patch
