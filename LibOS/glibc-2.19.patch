@@ -115,7 +115,7 @@ index 2383992..98687f6 100644
      __pointer_chk_guard;
    }
 +  SHIM {
-+    syscalldb; glibc_version; glibc_option; register_library;
++    syscalldb; glibc_version; glibc_option; register_library; __vdso_glibc_version;
 +  }
  }
 diff --git a/elf/dl-debug.c b/elf/dl-debug.c

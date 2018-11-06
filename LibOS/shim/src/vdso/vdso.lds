@@ -72,7 +72,10 @@ VERSION {
                 __vdso_getcpu;
                 time;
                 __vdso_time;
-
+        local: *;
+        };
+        SHIM {
+        global:
                 /* graphene specific symbols */
                 glibc_version;
                 __vdso_glibc_version;
