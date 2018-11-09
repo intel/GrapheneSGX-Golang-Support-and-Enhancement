@@ -186,44 +186,6 @@ index d5905d1..f4e108a 100644
  
  /* This symbol refers to the "dynamic structure" in the `.dynamic' section
     of whatever module refers to `_DYNAMIC'.  So, to find its own
-diff --git a/elf/rtld.c b/elf/rtld.c
-index 6dcbabc..c87c773 100644
---- a/elf/rtld.c
-+++ b/elf/rtld.c
-@@ -356,6 +356,23 @@ _dl_start_final (void *arg, struct dl_start_final_info *info)
-   return start_addr;
- }
- 
-+/* For graphene, check if glibc version match to the compatible SHIM
-+   library. If not, tell the user to update glibc. */
-+#include "glibc-version.h"
-+
-+volatile const int glibc_version __attribute__((weak)) = GLIBC_VERSION;
-+
-+static void __attribute__((noinline,optimize("-O0")))
-+check_glibc_version (void)
-+{
-+  if (glibc_version != GLIBC_VERSION)
-+    {
-+      _dl_fatal_printf ("Warning from Graphene: "
-+                        "Glibc version is incorrect. Please rebuild Glibc.\n");
-+      _exit (1);
-+    }
-+}
-+
- static ElfW(Addr) __attribute_used__ internal_function
- _dl_start (void *arg)
- {
-@@ -546,6 +563,9 @@ _dl_start (void *arg)
-      therefore need not test whether we have to allocate the array
-      for the relocation results (as done in dl-reloc.c).  */
- 
-+  /* For Graphene, check if the glibc version is correct. */
-+  check_glibc_version();
-+
-   /* Now life is sane; we can call functions and access global data.
-      Set up to use the operating system facilities, and find out from
-      the operating system's program loader where to find the program
 diff --git a/malloc/arena.c b/malloc/arena.c
 index 5088a25..33a3879 100644
 --- a/malloc/arena.c
