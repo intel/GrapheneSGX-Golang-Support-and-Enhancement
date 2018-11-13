@@ -553,7 +553,10 @@ void do_main (void * args)
     void * stack = __alloca(sizeof(unsigned long) +
                             sizeof(char *) * (argc + 2) +
                             sizeof(char *) * envc +
-                            sizeof(ElfW(auxv_t)) * auxc);
+                            sizeof(ElfW(auxv_t)) * auxc +
+                            16);
+    /* stack must be 16 bytes aligned according to x86-64 ABI */
+    stack = (void *)((uintptr_t)stack & ~15);
 
     *(unsigned long *) stack = argc + 1;
     new_argv = stack + sizeof(unsigned long *);
