@@ -458,7 +458,6 @@ int _DkReceiveHandle(PAL_HANDLE hdl, PAL_HANDLE * cargo)
             }
         }
 
-    handle->file.offset = 0;
     *cargo = handle;
     return 0;
 }

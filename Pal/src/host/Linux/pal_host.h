@@ -85,7 +85,6 @@ typedef struct pal_handle
 
         struct {
             PAL_IDX fd;
-            PAL_NUM offset;
             PAL_BOL append;
             PAL_BOL pass;
             PAL_STR realpath;

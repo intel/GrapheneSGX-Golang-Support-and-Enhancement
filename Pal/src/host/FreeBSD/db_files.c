@@ -57,7 +57,6 @@ static int file_open (PAL_HANDLE * handle, const char * type, const char * uri,
     SET_HANDLE_TYPE(hdl, file);
     hdl->hdr.flags |= RFD(0)|WFD(0)|WRITABLE(0);
     hdl->file.fd = ret;
-    hdl->file.offset = 0;
     hdl->file.append = 0;
     hdl->file.pass = 0;
     char * path = (void *) hdl + HANDLE_SIZE(file);
@@ -77,12 +76,11 @@ static int file_read (PAL_HANDLE handle, int offset, int count,
 {
     int fd = handle->file.fd;
     int ret;
-    ret = INLINE_SYSCALL(pread, 4, fd, buffer, count, handle->file.offset);
+    ret = INLINE_SYSCALL(pread, 4, fd, buffer, count, offset);
 
     if (IS_ERR(ret))
         return unix_to_pal_error(ERRNO(ret));
 
-    handle->file.offset = offset + ret;
     return ret;
 }
 
@@ -93,12 +91,11 @@ static int file_write (PAL_HANDLE handle, int offset, int count,
     int fd = handle->file.fd;
     int ret;
 
-    ret = INLINE_SYSCALL(pwrite, 4, fd, buffer, count, handle->file.offset);
+    ret = INLINE_SYSCALL(pwrite, 4, fd, buffer, count, offset);
 
     if (IS_ERR(ret))
         return unix_to_pal_error(ERRNO(ret));
 
-    handle->file.offset = offset + ret;
     return ret;
 }
 
