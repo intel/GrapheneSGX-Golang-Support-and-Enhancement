@@ -13,6 +13,7 @@
 #include <asm/fcntl.h>
 #include <asm/mman.h>
 #include <asm/errno.h>
+#include <asm/stat.h>
 #include <elf/elf.h>
 #include <sysdeps/generic/ldsodefs.h>
 
@@ -144,7 +145,11 @@ int open_manifest (const char ** argv)
 
 int load_manifest (int fd, struct config_store * config)
 {
-    int nbytes = INLINE_SYSCALL(lseek, 3, fd, 0, SEEK_END);
+    struct stat stat;
+    int ret = INLINE_SYSCALL(fstat, 2, fd, &stat);
+    if (IS_ERR(ret))
+        return -ERRNO(ret);
+    int nbytes = stat.st_size;
 
     if (IS_ERR(nbytes))
         return -ERRNO(nbytes);
@@ -163,7 +168,7 @@ int load_manifest (int fd, struct config_store * config)
     config->free     = NULL;
 
     const char * errstring = NULL;
-    int ret = read_config(config, NULL, &errstring);
+    ret = read_config(config, NULL, &errstring);
 
     if (ret < 0) {
         printf("can't read manifest: %s\n", errstring);

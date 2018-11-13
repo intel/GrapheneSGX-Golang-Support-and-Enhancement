@@ -45,10 +45,6 @@ typedef __kernel_pid_t pid_t;
 #include <sys/socket.h>
 #include <asm/errno.h>
 
-#ifndef SEEK_SET
-# define SEEK_SET 0
-#endif
-
 static inline int create_process_handle (PAL_HANDLE * parent,
                                          PAL_HANDLE * child)
 {

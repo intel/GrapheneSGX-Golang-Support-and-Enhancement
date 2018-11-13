@@ -451,12 +451,7 @@ int _DkReceiveHandle(PAL_HANDLE hdl, PAL_HANDLE * cargo)
             }
         }
 
-    if (IS_HANDLE_TYPE(handle, file)) {
-        ret = INLINE_SYSCALL(lseek, 3, handle->file.fd, 0, SEEK_SET);
-        if (!IS_ERR(ret))
-            handle->file.offset = ret;
-    }
-
+    handle->file.offset = 0;
     *cargo = handle;
     return 0;
 }

@@ -77,16 +77,7 @@ static int file_read (PAL_HANDLE handle, int offset, int count,
 {
     int fd = handle->file.fd;
     int ret;
-    if (handle->file.offset != offset) {
-        ret = INLINE_SYSCALL(lseek, 3, fd, offset, SEEK_SET);
-
-        if (IS_ERR(ret))
-            return -PAL_ERROR_DENIED;
-
-        handle->file.offset = offset;
-    }
-
-    ret = INLINE_SYSCALL(read, 3, fd, buffer, count);
+    ret = INLINE_SYSCALL(pread, 4, fd, buffer, count, handle->file.offset);
 
     if (IS_ERR(ret))
         return unix_to_pal_error(ERRNO(ret));
@@ -102,15 +93,7 @@ static int file_write (PAL_HANDLE handle, int offset, int count,
     int fd = handle->file.fd;
     int ret;
 
-    if (handle->file.offset != offset) {
-        ret = INLINE_SYSCALL(lseek, 3, fd, offset, SEEK_SET);
-        if (IS_ERR(ret))
-            return -PAL_ERROR_DENIED;
-
-        handle->file.offset = offset;
-    }
-
-    ret = INLINE_SYSCALL(write, 3, fd, buffer, count);
+    ret = INLINE_SYSCALL(pwrite, 4, fd, buffer, count, handle->file.offset);
 
     if (IS_ERR(ret))
         return unix_to_pal_error(ERRNO(ret));

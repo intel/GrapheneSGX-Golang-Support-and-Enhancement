@@ -1,16 +1,17 @@
+#include <asm/fcntl.h>
+#include <asm/socket.h>
+#include <asm/unistd.h>
+#include <linux/fs.h>
+#include <linux/in.h>
+#include <linux/in6.h>
+#include <asm/errno.h>
+
 #include <pal_linux.h>
 #include <pal_rtld.h>
 #include "sgx_internal.h"
 #include "sgx_tls.h"
 #include "sgx_enclave.h"
 #include "debugger/sgx_gdb.h"
-
-#include <asm/fcntl.h>
-#include <asm/socket.h>
-#include <linux/fs.h>
-#include <linux/in.h>
-#include <linux/in6.h>
-#include <asm/errno.h>
 
 #include <sysdep.h>
 #include <sysdeps/generic/ldsodefs.h>
@@ -99,11 +100,8 @@ int scan_enclave_binary (int fd, unsigned long * base, unsigned long * size,
 {
     int ret = 0;
 
-    if (IS_ERR(ret = INLINE_SYSCALL(lseek, 3, fd, 0, SEEK_SET)))
-        return -ERRNO(ret);
-
     char filebuf[FILEBUF_SIZE];
-    ret = INLINE_SYSCALL(read, 3, fd, filebuf, FILEBUF_SIZE);
+    ret = INLINE_SYSCALL(pread, 4, fd, filebuf, FILEBUF_SIZE, 0);
     if (IS_ERR(ret))
         return -ERRNO(ret);
 
@@ -139,11 +137,8 @@ int load_enclave_binary (sgx_arch_secs_t * secs, int fd,
 {
     int ret = 0;
 
-    if (IS_ERR(ret = INLINE_SYSCALL(lseek, 3, fd, 0, SEEK_SET)))
-        return -ERRNO(ret);
-
     char filebuf[FILEBUF_SIZE];
-    ret = INLINE_SYSCALL(read, 3, fd, filebuf, FILEBUF_SIZE);
+    ret = INLINE_SYSCALL(pread, 4, fd, filebuf, FILEBUF_SIZE, 0);
     if (IS_ERR(ret))
         return -ERRNO(ret);
 
@@ -654,13 +649,11 @@ static void create_instance (struct pal_sec * pal_sec)
 
 int load_manifest (int fd, struct config_store ** config_ptr)
 {
-    int ret = 0;
-
-    int nbytes = INLINE_SYSCALL(lseek, 3, fd, 0, SEEK_END);
-    if (IS_ERR(nbytes)) {
-        SGX_DBG(DBG_E, "Cannot detect size of manifest file\n");
-        return -ERRNO(nbytes);
-    }
+    struct stat stat;
+    int ret = INLINE_SYSCALL(fstat, 2, fd, &stat);
+    if (IS_ERR(ret))
+        return -ERRNO(ret);
+    int nbytes = stat.st_size;
 
     struct config_store * config = malloc(sizeof(struct config_store));
     if (!config) {

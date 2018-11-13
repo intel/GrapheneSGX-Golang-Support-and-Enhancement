@@ -176,10 +176,6 @@ int handle_serialize (PAL_HANDLE handle, void ** data)
     return hdlsz + dsz1 + dsz2;
 }
 
-#ifndef SEEK_SET
-# define SEEK_SET 0
-#endif
-
 int handle_deserialize (PAL_HANDLE * handle, const void * data, int size)
 {
     PAL_HANDLE hdl_data = (void *) data, hdl = NULL;
@@ -462,12 +458,7 @@ int _DkReceiveHandle(PAL_HANDLE hdl, PAL_HANDLE * cargo)
             }
         }
 
-    if (IS_HANDLE_TYPE(handle, file)) {
-        ret = INLINE_SYSCALL(lseek, 3, handle->file.fd, 0, SEEK_SET);
-        if (!IS_ERR(ret))
-            handle->file.offset = ret;
-    }
-
+    handle->file.offset = 0;
     *cargo = handle;
     return 0;
 }

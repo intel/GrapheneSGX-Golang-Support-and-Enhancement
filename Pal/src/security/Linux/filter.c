@@ -50,7 +50,6 @@ typedef __builtin_va_list __gnuc_va_list;
     SYSCALL(__NR_getsockopt,    ALLOW),                  \
     SYSCALL(__NR_ioctl,         JUMP(&labels, ioctl)),   \
     SYSCALL(__NR_listen,        ALLOW),                  \
-    SYSCALL(__NR_lseek,         ALLOW),                  \
     SYSCALL(__NR_mkdir,         ALLOW),                  \
     SYSCALL(__NR_mmap,          JUMP(&labels, mmap)),    \
     SYSCALL(__NR_mprotect,      ALLOW),                  \
@@ -78,6 +77,8 @@ typedef __builtin_va_list __gnuc_va_list;
     SYSCALL(__NR_process_vm_readv, ALLOW),               \
     SYSCALL(__NR_prctl, ALLOW),                          \
     SYSCALL(__NR_vmsplice, ALLOW),                       \
+    SYSCALL(__NR_pread,         ALLOW),                  \
+    SYSCALL(__NR_pwrite,        ALLOW),                  \
                                                          \
     SYSCALL_ARCH_FILTERS
 

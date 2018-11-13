@@ -19,7 +19,6 @@ getsockname
 gettimeofday
 ioctl
 listen
-lseek
 mkdir
 mmap
 mprotect
@@ -29,6 +28,8 @@ open
 pipe2
 ppoll
 prctl
+pread
+pwrite
 read
 recvmsg
 rename
