@@ -521,8 +521,12 @@ void do_main (void * args)
 
     ret = set_sandbox(&sandbox_config, pal_sec_addr, pal_addr);
     if (ret < 0) {
+#if 0
         printf("Unable to load sandbox policies\n");
         goto exit;
+#else
+        printf("graphene sandboxing failed. continue without sandboxing\n");
+#endif
     }
 
     /* free PAL_INIT_FD */
