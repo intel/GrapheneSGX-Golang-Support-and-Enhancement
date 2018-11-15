@@ -3,7 +3,8 @@ HOST_DIR = host/$(PAL_HOST)
 
 CFLAGS	= -Wall -fPIC -O2 -maes -std=c11 -U_FORTIFY_SOURCE \
 	  -fno-omit-frame-pointer \
-	  -fno-stack-protector -fno-builtin
+	  -fno-stack-protector -fno-builtin \
+	  -mno-sse -mno-mmx -mno-sse2 -mno-3dnow -mno-avx
 
 EXTRAFLAGS = -Wextra $(call cc-option,-Wnull-dereference)
 
