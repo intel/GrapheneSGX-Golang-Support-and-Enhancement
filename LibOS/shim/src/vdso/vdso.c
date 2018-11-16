@@ -66,6 +66,21 @@ unsigned int __vdso_glibc_version = GLIBC_VERSION;
 extern unsigned int glibc_version
 __attribute__((weak, alias("__vdso_glibc_version")));
 
+long __vdso_syscalldb(
+    long a0, long a1, long a2, long a3, long a4, long a5, long a6)
+{
+    __UNUSED(a0);
+    __UNUSED(a1);
+    __UNUSED(a2);
+    __UNUSED(a3);
+    __UNUSED(a4);
+    __UNUSED(a5);
+    __UNUSED(a6);
+    return -ENOSYS;
+}
+extern long syscalldb(
+    long a0, long a1, long a2, long a3, long a4, long a5, long a6)
+    __attribute__((alias("__vdso_syscalldb")));
 
 /* notes section: .note.Linux */
 __asm__(".pushsection .note.Linux, \"a\", @note\n");

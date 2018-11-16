@@ -78,7 +78,7 @@ libsysdb.so: $(addsuffix .o,$(objs)) $(filter %.map %.lds,$(LDFLAGS-$@)) \
 	$(call cmd,ld_so_o)
 
 LDFLAGS-libsysdb_debug.so += --version-script shim-debug.map -T shim.lds
-libsysdb_debug.so: $(addsuffix .o,$(filter-out syscallas,$(objs))) \
+libsysdb_debug.so: $(addsuffix .o,$(objs)) \
 		   $(filter %.map %.lds,$(LDFLAGS-$@)) \
 		   $(graphene_lib) $(pal_lib)
 	$(call cmd,ld_so_o)

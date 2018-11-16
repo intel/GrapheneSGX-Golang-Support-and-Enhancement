@@ -76,6 +76,7 @@ VERSION {
                 /* graphene specific symbols */
                 glibc_version;
                 __vdso_glibc_version;
+                __vdso_syscalldb;
         local: *;
         };
 }
