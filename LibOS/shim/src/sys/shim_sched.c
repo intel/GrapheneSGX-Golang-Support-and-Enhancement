@@ -61,3 +61,12 @@ int shim_do_sched_getaffinity (pid_t pid, size_t len,
      * See SYSCALL_DEFINE3(sched_getaffinity) */
     return bitmask_size_in_bytes;
 }
+
+int shim_do_sched_setaffinity(pid_t pid, size_t len,
+                              __kernel_cpu_set_t * user_mask_ptr)
+{
+    __UNUSED(pid);
+    __UNUSED(len);
+    __UNUSED(user_mask_ptr);
+    return 0;
+}
