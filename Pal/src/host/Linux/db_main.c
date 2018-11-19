@@ -304,6 +304,9 @@ done_init:
     if (!parent && !exec && !manifest) {
         printf("Executable not found\n");
         printf("USAGE: %s [executable|manifest] args ...\n", pal_name);
+        if (!exec && !manifest) {
+            printf("can't open %s\n", argv[0]);
+        }
         _DkProcessExit(0);
     }
 
