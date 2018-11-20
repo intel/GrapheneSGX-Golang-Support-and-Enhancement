@@ -30,6 +30,8 @@
 #include "api.h"
 
 #include <errno.h>
+#define __timespec_defined
+#include <sched.h>
 #include <linux/signal.h>
 #include <linux/mman.h>
 #include <linux/sched.h>
@@ -212,3 +214,32 @@ int _DkThreadResume (PAL_HANDLE threadHandle)
 struct handle_ops thread_ops = {
     /* nothing */
 };
+
+
+int _DkThreadGetAffinity(PAL_HANDLE threadHandle, PAL_NUM cpuSetSize,
+                         PAL_PTR mask)
+{
+    size_t len = cpuSetSize;
+    cpu_set_t * user_mask_ptr = mask;
+
+    int ret = INLINE_SYSCALL(sched_getaffinity, 3, threadHandle->thread.tid,
+                             len, user_mask_ptr);
+    if (IS_ERR(ret))
+        return -unix_to_pal_error(ERRNO(ret));
+
+    return ret;
+}
+
+int _DkThreadSetAffinity(PAL_HANDLE threadHandle, PAL_NUM cpuSetSize,
+                         const PAL_PTR mask)
+{
+    size_t len = cpuSetSize;
+    cpu_set_t * user_mask_ptr = mask;
+    int ret = INLINE_SYSCALL(sched_setaffinity, 3, threadHandle->thread.tid,
+                             len, user_mask_ptr);
+
+    if (IS_ERR(ret))
+        return -unix_to_pal_error(ERRNO(ret));
+
+    return 0;
+}

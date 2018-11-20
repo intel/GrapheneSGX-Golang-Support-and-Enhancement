@@ -403,6 +403,13 @@ DkThreadExit (void);
 PAL_BOL
 DkThreadResume (PAL_HANDLE thread);
 
+PAL_NUM
+DkThreadGetAffinity(PAL_HANDLE threadHandle, PAL_NUM cpuSetSize,
+                    PAL_PTR mask);
+void DkThreadSetAffinity(PAL_HANDLE threadHandle, PAL_NUM cpuSetSize,
+                         const PAL_PTR mask);
+
+
 /* Exception Handling */
 /* arithmetic error (div-by-zero, floating point exception, etc.) */
 #define PAL_EVENT_ARITHMETIC_ERROR 1

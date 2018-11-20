@@ -4,6 +4,7 @@ PAL {
         DkVirtualMemoryAlloc; DkVirtualMemoryFree; DkVirtualMemoryProtect;
         DkThreadCreate; DkThreadDelayExecution;
         DkThreadYieldExecution; DkThreadExit; DkThreadResume;
+        DkThreadSetAffinity; DkThreadGetAffinity;
 
         DkMutexCreate; DkNotificationEventCreate;
         DkSynchronizationEventCreate;

@@ -106,3 +106,44 @@ PAL_BOL DkThreadResume (PAL_HANDLE threadHandle)
 
     LEAVE_PAL_CALL_RETURN(PAL_TRUE);
 }
+
+PAL_NUM
+DkThreadGetAffinity(PAL_HANDLE threadHandle, PAL_NUM cpuSetSize,
+                    PAL_PTR mask)
+{
+    ENTER_PAL_CALL(DkThreadGetAffinity);
+
+    if (!threadHandle || !IS_HANDLE_TYPE(threadHandle, thread)) {
+        _DkRaiseFailure(PAL_ERROR_INVAL);
+        LEAVE_PAL_CALL_RETURN(-PAL_ERROR_INVAL);
+    }
+
+    int ret = _DkThreadGetAffinity(threadHandle, cpuSetSize, mask);
+
+    if (ret < 0) {
+        _DkRaiseFailure(PAL_ERROR_NOTIMPLEMENTED);
+        LEAVE_PAL_CALL_RETURN(ret);
+    }
+
+    LEAVE_PAL_CALL_RETURN(ret);
+}
+
+void DkThreadSetAffinity(PAL_HANDLE threadHandle, PAL_NUM cpuSetSize,
+                         const PAL_PTR mask)
+{
+    ENTER_PAL_CALL(DkThreadSetAffinity);
+
+    if (!threadHandle || !IS_HANDLE_TYPE(threadHandle, thread)) {
+        _DkRaiseFailure(PAL_ERROR_INVAL);
+        LEAVE_PAL_CALL();
+    }
+
+    int ret = _DkThreadSetAffinity(threadHandle, cpuSetSize, mask);
+
+    if (ret < 0) {
+        _DkRaiseFailure(PAL_ERROR_NOTIMPLEMENTED);
+        LEAVE_PAL_CALL();
+    }
+
+    LEAVE_PAL_CALL();
+}

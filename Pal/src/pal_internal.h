@@ -304,6 +304,11 @@ int _DkProcessCreate (PAL_HANDLE * handle, const char * uri,
                       const char ** args);
 noreturn void _DkProcessExit (int exitCode);
 int _DkProcessSandboxCreate (const char * manifest, int flags);
+int _DkThreadGetAffinity(PAL_HANDLE threadHandle, PAL_NUM cpuSetSize,
+                         PAL_PTR mask);
+int _DkThreadSetAffinity(PAL_HANDLE threadHandle, PAL_NUM cpuSetSize,
+                         const PAL_PTR mask);
+
 
 /* DkMutex calls */
 int _DkMutexCreate (PAL_HANDLE * handle, int initialCount);
