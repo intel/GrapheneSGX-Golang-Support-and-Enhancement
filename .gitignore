@@ -43,3 +43,6 @@ TAGS
 cscope.*
 ncscope.*
 *cscope*
+
+# cflow
+cflow*.*
