@@ -53,6 +53,8 @@ enum {
     OCALL_RENAME,
     OCALL_DELETE,
     OCALL_LOAD_DEBUG,
+    OCALL_SCHED_GETAFFINITY,
+    OCALL_SCHED_SETAFFINITY,
     OCALL_NR,
 };
 
@@ -261,5 +263,18 @@ typedef struct {
 typedef struct {
     unsigned int ms_tid;
 } ms_ocall_schedule_t;
+
+typedef struct {
+    unsigned long pid;
+    size_t cpusetsize;
+    unsigned long * mask;
+    unsigned long mask_bits[];
+} ms_ocall_sched_getaffinity_t;
+
+typedef struct {
+    unsigned long pid;
+    size_t cpusetsize;
+    const unsigned long * mask;
+} ms_ocall_sched_setaffinity_t;
 
 #pragma pack(pop)

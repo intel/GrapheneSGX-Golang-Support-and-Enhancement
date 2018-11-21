@@ -100,3 +100,9 @@ int ocall_rename (const char * oldpath, const char * newpath);
 int ocall_delete (const char * pathname);
 
 int ocall_load_debug (const char * command);
+
+int ocall_sched_getaffinity(
+    unsigned long pid, size_t cpusetsize, unsigned long * mask);
+
+int ocall_sched_setaffinity(
+    unsigned long pid, size_t cpusetsize, const unsigned long * mask);

@@ -1104,3 +1104,51 @@ int ocall_load_debug(const char * command)
     sgx_reset_ustack();
     return retval;
 }
+
+int ocall_sched_getaffinity(
+    unsigned long pid, size_t cpusetsize, unsigned long * mask)
+{
+    int retval = 0;
+    ms_ocall_sched_getaffinity_t * ms;
+    ms = sgx_alloc_on_ustack(sizeof(*ms) + cpusetsize);
+    if (!ms) {
+        sgx_reset_ustack();
+        return -EPERM;
+    }
+    ms->pid = pid;
+    ms->cpusetsize = cpusetsize;
+    ms->mask = ms->mask_bits;
+
+    retval = sgx_ocall(OCALL_SCHED_GETAFFINITY, ms);
+    if (retval > 0) {
+        if (!sgx_copy_to_enclave(mask, cpusetsize, ms->mask, retval)) {
+            sgx_reset_ustack();
+            return -EPERM;
+        }
+    }
+    sgx_reset_ustack();
+    return retval;
+}
+
+int ocall_sched_setaffinity(
+    unsigned long pid, size_t cpusetsize, const unsigned long * mask)
+{
+    int retval = 0;
+    ms_ocall_sched_setaffinity_t * ms;
+    ms = sgx_alloc_on_ustack(sizeof(*ms));
+    if (!ms) {
+        sgx_reset_ustack();
+        return -EPERM;
+    }
+    ms->pid = pid;
+    ms->cpusetsize = cpusetsize;
+    ms->mask = sgx_copy_to_ustack(mask, cpusetsize);
+    if (!ms->mask) {
+        sgx_reset_ustack();
+        return -EPERM;
+    }
+
+    retval = sgx_ocall(OCALL_SCHED_SETAFFINITY, ms);
+    sgx_reset_ustack();
+    return retval;
+}

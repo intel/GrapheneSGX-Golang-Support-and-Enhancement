@@ -656,6 +656,26 @@ static int sgx_ocall_load_debug(void * pms)
     return 0;
 }
 
+static int sgx_ocall_sched_getaffinity(void * pms)
+{
+    ms_ocall_sched_getaffinity_t * ms = (ms_ocall_sched_getaffinity_t *) pms;
+    ODEBUG(OCALL_SCHED_GETAFFINITY, ms);
+    int ret;
+    ret = INLINE_SYSCALL(sched_getaffinity, 3,
+                         ms->pid, ms->cpusetsize, ms->mask);
+    return IS_ERR(ret) ? unix_to_pal_error(ERRNO(ret)) : ret;
+}
+
+static int sgx_ocall_sched_setaffinity(void * pms)
+{
+    ms_ocall_sched_setaffinity_t * ms = (ms_ocall_sched_setaffinity_t *) pms;
+    ODEBUG(OCALL_SCHED_SETAFFINITY, ms);
+    int ret;
+    ret = INLINE_SYSCALL(sched_setaffinity, 3,
+                         ms->pid, ms->cpusetsize, ms->mask);
+    return IS_ERR(ret) ? unix_to_pal_error(ERRNO(ret)) : ret;
+}
+
 sgx_ocall_fn_t ocall_table[OCALL_NR] = {
         [OCALL_EXIT]            = sgx_ocall_exit,
         [OCALL_PRINT_STRING]    = sgx_ocall_print_string,
@@ -694,6 +714,8 @@ sgx_ocall_fn_t ocall_table[OCALL_NR] = {
         [OCALL_RENAME]          = sgx_ocall_rename,
         [OCALL_DELETE]          = sgx_ocall_delete,
         [OCALL_LOAD_DEBUG]      = sgx_ocall_load_debug,
+        [OCALL_SCHED_GETAFFINITY] = sgx_ocall_sched_getaffinity,
+        [OCALL_SCHED_SETAFFINITY] = sgx_ocall_sched_setaffinity,
     };
 
 #define EDEBUG(code, ms) do {} while (0)
