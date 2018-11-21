@@ -106,3 +106,5 @@ int ocall_sched_getaffinity(
 
 int ocall_sched_setaffinity(
     unsigned long pid, size_t cpusetsize, const unsigned long * mask);
+
+int ocall_rdtsc(unsigned long * low, unsigned long * high);

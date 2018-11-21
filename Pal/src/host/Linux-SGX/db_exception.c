@@ -182,8 +182,11 @@ static bool handle_ud(sgx_context_t * uc)
     } else if (instr[0] == 0x0f && instr[1] == 0x31) {
         /* rdtsc */
         uc->rip += 2;
-        uc->rdx = 0;
-        uc->rax = 0;
+        unsigned long high;
+        unsigned long low;
+        ocall_rdtsc(&low, &high);
+        uc->rdx = high;
+        uc->rax = low;
         return true;
     } else if (instr[0] == 0x0f && instr[1] == 0x05) {
         /* syscall: LibOS may know how to handle this */

@@ -1152,3 +1152,20 @@ int ocall_sched_setaffinity(
     sgx_reset_ustack();
     return retval;
 }
+
+int ocall_rdtsc(unsigned long *low, unsigned long *high)
+{
+    int retval = 0;
+    ms_ocall_rdtsc_t * ms;
+    ms = sgx_alloc_on_ustack(sizeof(*ms));
+    if (!ms) {
+        sgx_reset_ustack();
+        return -EPERM;
+    }
+
+    retval = sgx_ocall(OCALL_RDTSC, ms);
+    *low = ms->low;
+    *high = ms->high;
+    sgx_reset_ustack();
+    return retval;
+}
