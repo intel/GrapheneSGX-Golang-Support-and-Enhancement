@@ -45,12 +45,11 @@
 int _DkThreadCreate (PAL_HANDLE * handle, int (*callback) (void *),
                      const void * param)
 {
-   void * child_stack = NULL;
-
-    if (_DkVirtualMemoryAlloc(&child_stack, THREAD_STACK_SIZE, 0,
-                              PAL_PROT_READ|PAL_PROT_WRITE) < 0)
+    PAL_HANDLE hdl = malloc(HANDLE_SIZE(thread) + THREAD_STACK_SIZE);
+    if (hdl == NULL)
         return -PAL_ERROR_NOMEM;
 
+    void * child_stack = hdl + 1;
     // move child_stack to the top of stack.
     child_stack += THREAD_STACK_SIZE;
 
@@ -67,8 +66,10 @@ int _DkThreadCreate (PAL_HANDLE * handle, int (*callback) (void *),
                     callback,
                     (void *)param);
 
-    if (IS_ERR(ret))
+    if (IS_ERR(ret)) {
+        free(hdl);
         return -PAL_ERROR_DENIED;
+    }
 
     PAL_HANDLE hdl = malloc(HANDLE_SIZE(thread));
     SET_HANDLE_TYPE(hdl, thread);
