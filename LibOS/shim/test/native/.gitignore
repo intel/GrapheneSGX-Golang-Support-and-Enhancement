@@ -4,6 +4,7 @@
 
 # generated executables
 alarm
+alarm_loop
 brk
 clone
 condvar.pthread
