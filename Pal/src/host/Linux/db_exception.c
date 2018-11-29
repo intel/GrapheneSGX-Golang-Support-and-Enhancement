@@ -165,6 +165,11 @@ static bool _DkGenericSignalHandle (int event_num, siginfo_t * info,
     return false;
 }
 
+PAL_BOL DkInPal (const PAL_CONTEXT * context)
+{
+    return context && ADDR_IN_PAL(context->rip);
+}
+
 static void _DkGenericSighandler (int signum, siginfo_t * info,
                                   struct ucontext * uc)
 {

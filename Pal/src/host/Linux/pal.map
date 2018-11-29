@@ -33,6 +33,7 @@ PAL {
 
         # The ABIs we added in the paper
         DkSetExceptionHandler; DkExceptionReturn; # exceptions
+        DkInPal;
         DkCreatePhysicalMemoryChannel; # IPC
         DkPhysicalMemoryCommit; # IPC
         DkPhysicalMemoryMap; # IPC
