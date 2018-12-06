@@ -9,5 +9,4 @@ SHIM {
         vfputchar; vfputs; vfprintf; snprintf;
         malloc; free; malloc_copy;
         glibc_version;
-        debug_unsupp; shim_table;
 };
