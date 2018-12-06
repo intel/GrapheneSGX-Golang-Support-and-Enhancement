@@ -72,6 +72,11 @@ _DkGenericSignalHandle (int event_num, PAL_NUM arg, struct pal_frame * frame,
 #define ADDR_IN_PAL(addr)  \
         ((void*)(addr) > TEXT_START && (void*)(addr) < TEXT_END)
 
+PAL_BOL DkInPal (const PAL_CONTEXT * context)
+{
+    return context && ADDR_IN_PAL(context->rip);
+}
+
 static struct pal_frame * get_frame (sgx_context_t * uc)
 {
     unsigned long rbp;
