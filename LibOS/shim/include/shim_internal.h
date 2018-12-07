@@ -73,6 +73,21 @@ void debug_puts (const char * str);
 void debug_putch (int ch);
 void debug_vprintf (const char * fmt, va_list ap) __attribute__((format (printf, 1, 0)));
 
+void __debug_regs(const char * file, const int line, const char * func,
+                  const struct shim_regs * regs);
+void __debug_context(const char * file, const int line, const char * func,
+                     const struct shim_context * context);
+void __debug_hex(const char * file, const int line, const char * func,
+                 unsigned long * addr, int count);
+
+#define debug_regs(regs)                                \
+    __debug_regs(__FILE__, __LINE__, __func__, (regs))
+#define debug_context(context) \
+    __debug_context(__FILE__, __LINE__, __func__, (context))
+#define debug_hex(addr, count)                                  \
+    __debug_hex(__FILE__, __LINE__, __func__, (addr), (count))
+
+
 #define VMID_PREFIX     "[P%05u] "
 #define TID_PREFIX      "[%-6u] "
 #define NOID_PREFIX     "[      ] "
