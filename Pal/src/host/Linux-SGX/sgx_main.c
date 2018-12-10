@@ -642,6 +642,7 @@ static void create_instance (struct pal_sec * pal_sec)
 {
     unsigned int id;
     getrand(&id, sizeof(id));
+    /* XXX: should create the dir to ensure it's unique */
     snprintf(pal_sec->pipe_prefix, sizeof(pal_sec->pipe_prefix),
              "/graphene/%x/", id);
     pal_sec->instance_id = id;
