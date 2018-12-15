@@ -109,7 +109,4 @@ static inline void wrfsbase (uint64_t addr)
         :: "D"(addr));
 }
 
-void restore_sgx_context(sgx_context_t *ctx);
-void _restore_sgx_context(sgx_context_t *ctx);
-
 #endif /* SGX_API_H */

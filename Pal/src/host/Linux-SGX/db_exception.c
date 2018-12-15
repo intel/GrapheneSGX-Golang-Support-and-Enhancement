@@ -159,6 +159,44 @@ void _DkExceptionRealHandler (int event, PAL_NUM arg, struct pal_frame * frame,
     _DkGenericSignalHandle(event, arg, frame, context);
 }
 
+static void restore_sgx_context (sgx_context_t * uc)
+{
+    /* prepare the return address */
+    // uc->rsp -= 8;
+    // *(uint64_t *) uc->rsp = uc->rip;
+
+    SGX_DBG(DBG_E, "uc %p rsp 0x%08lx &rsp: %p rip 0x%08lx &rip: %p\n",
+            uc, uc->rsp, &uc->rsp, uc->rip, &uc->rip);
+    if (uc->rsp - RED_ZONE_SIZE - 8 != (unsigned long)&uc->rip) {
+        assert((uintptr_t)(uc + 1) + RED_ZONE_SIZE <= uc->rsp);
+        *(unsigned long *)(uc->rsp - RED_ZONE_SIZE - 8) = uc->rip;
+    }
+
+    /* now pop the stack */
+    __asm__ volatile (
+                  "mov %0, %%rsp\n"
+                  "pop %%rax\n"
+                  "pop %%rcx\n"
+                  "pop %%rdx\n"
+                  "pop %%rbx\n"
+                  "add $8, %%rsp\n" /* don't pop RSP yet */
+                  "pop %%rbp\n"
+                  "pop %%rsi\n"
+                  "pop %%rdi\n"
+                  "pop %%r8\n"
+                  "pop %%r9\n"
+                  "pop %%r10\n"
+                  "pop %%r11\n"
+                  "pop %%r12\n"
+                  "pop %%r13\n"
+                  "pop %%r14\n"
+                  "pop %%r15\n"
+                  "popfq\n"
+                  "mov -13 * 8(%%rsp), %%rsp\n"
+                  "jmp * -" XSTRINGIFY(RED_ZONE_SIZE) " - 8(%%rsp)\n"
+                  :: "r"(uc) : "memory");
+}
+
 /*
  * return value:
  *  true:  #UD is handled.
