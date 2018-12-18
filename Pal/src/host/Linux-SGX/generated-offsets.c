@@ -68,6 +68,8 @@ void dummy(void)
     OFFSET(SGX_ENCLAVE_SIZE, enclave_tls, enclave_size);
     OFFSET(SGX_TCS_OFFSET, enclave_tls, tcs_offset);
     OFFSET(SGX_INITIAL_STACK_OFFSET, enclave_tls, initial_stack_offset);
+    OFFSET(SGX_SIG_STACK_LOW, enclave_tls, sig_stack_low);
+    OFFSET(SGX_SIG_STACK_HIGH, enclave_tls, sig_stack_high);
     OFFSET(SGX_AEP, enclave_tls, aep);
     OFFSET(SGX_SSA, enclave_tls, ssa);
     OFFSET(SGX_GPR, enclave_tls, gpr);
@@ -126,6 +128,7 @@ void dummy(void)
     DEFINE(SSAFRAMENUM, SSAFRAMENUM);
     DEFINE(MEMORY_GAP, MEMORY_GAP);
     DEFINE(ENCLAVE_STACK_SIZE, ENCLAVE_STACK_SIZE);
+    DEFINE(ENCLAVE_SIG_STACK_SIZE, ENCLAVE_SIG_STACK_SIZE);
     DEFINE(DEFAULT_HEAP_MIN, DEAFULT_HEAP_MIN);
 
     /* pal_linux.h */
