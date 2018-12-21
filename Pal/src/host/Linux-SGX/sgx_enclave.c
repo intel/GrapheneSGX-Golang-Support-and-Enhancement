@@ -586,6 +586,7 @@ static int sgx_ocall_sleep(void * pms)
     ms_ocall_sleep_t * ms = (ms_ocall_sleep_t *) pms;
     int ret;
     ODEBUG(OCALL_SLEEP, ms);
+    SGX_DBG(DBG_E, "sgx_ocall_sleep %ld\n", ms->ms_microsec);
     if (!ms->ms_microsec) {
         INLINE_SYSCALL(sched_yield, 0);
         return 0;
