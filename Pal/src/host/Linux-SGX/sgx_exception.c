@@ -77,7 +77,7 @@ __attribute__((visibility("hidden"))) void __restore_rt(void);
 
 #endif
 
-int set_sighandler (int * sigs, int nsig, void * handler)
+static int set_sighandler (int * sigs, int nsig, void * handler)
 {
     struct sigaction action;
     action.sa_handler = (void (*)(int)) handler;
