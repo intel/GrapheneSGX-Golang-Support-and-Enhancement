@@ -233,6 +233,11 @@ extern struct pal_enclave_config {
 
 #define SGX_DBG(class, fmt...) \
     do { if ((class) & DBG_LEVEL) pal_printf(fmt); } while (0)
+#define __SGX_DBG(class, fmt...)                \
+    do {                                        \
+        if ((class) & DBG_LEVEL)                \
+            pal_printf(fmt);                    \
+    } while (0)
 #endif
 
 #endif /* PAL_LINUX_H */

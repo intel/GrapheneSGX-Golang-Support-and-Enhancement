@@ -335,8 +335,8 @@ int init_enclave(sgx_arch_secs_t * secs,
     SGX_DBG(DBG_I, "    enclave id:   0x%016lx\n", enclave_valid_addr);
     SGX_DBG(DBG_I, "    enclave hash:");
     for (size_t i = 0 ; i < sizeof(sgx_arch_hash_t) ; i++)
-        SGX_DBG(DBG_I, " %02x", sigstruct->enclave_hash[i]);
-    SGX_DBG(DBG_I, "\n");
+        __SGX_DBG(DBG_I, " %02x", sigstruct->enclave_hash[i]);
+    __SGX_DBG(DBG_I, "\n");
 
 #if SDK_DRIVER_VERSION >= KERNEL_VERSION(1, 8, 0)
     struct sgx_enclave_init param = {
