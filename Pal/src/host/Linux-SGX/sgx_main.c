@@ -384,7 +384,7 @@ int initialize_enclave (struct pal_enclave * enclave)
         areas[area_num] = (struct mem_area) {
             .desc = "exec", .skip_eextend = false, .is_binary = true,
             .fd = enclave->exec, .addr = 0, .size = 0 /* set below */,
-            .prot = PROT_WRITE, .type = SGX_PAGE_REG
+            .prot = 0, .type = SGX_PAGE_REG
         };
         exec_area = &areas[area_num++];
 

@@ -353,7 +353,7 @@ def get_memory_areas(manifest, attr, args):
 
     if 'exec' in args:
         areas.append(MemoryArea('exec', file=args['exec'],
-                                flags=PAGEINFO_W|PAGEINFO_REG))
+                                flags=PAGEINFO_REG))
     return areas
 
 def find_areas(areas, desc):
