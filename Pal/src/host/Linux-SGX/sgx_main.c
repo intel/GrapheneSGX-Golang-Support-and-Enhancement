@@ -539,6 +539,8 @@ int initialize_enclave (struct pal_enclave * enclave)
             goto out;
         }
     }
+    INLINE_SYSCALL(close, 1,pal_area->fd);
+    pal_area->fd = -1;
 
     ret = init_enclave(&enclave_secs, &enclave_sigstruct, &enclave_token);
     if (ret < 0) {
