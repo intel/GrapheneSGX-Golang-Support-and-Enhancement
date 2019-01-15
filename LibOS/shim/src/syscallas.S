@@ -113,6 +113,23 @@ __syscallas_signal_allowed_0_begin:
         je isundef
 __syscallas_signal_allowed_0_end:
 
+        ## struct shim_regs
+        ##   %r15
+        ##   %r14
+        ##   %r13
+        ##   %r12
+        ##   %r11
+        ##   %r10
+        ##   %r9
+        ##   %r8
+        ##   %rcx
+        ##   %rdx
+        ##   %rsi
+        ##   %rdi
+        ##   %rbx
+        ##   %rbp: previous %rbp <= %rbp: current %rbp
+        ## %rip: saved RIP
+        ## previous stack frame
         movq %rbp, TCB_SEGMENT_REG:(SHIM_TCB_OFFSET + TCB_REGS)
 
         /* Translating x86_64 kernel calling convention to user-space
