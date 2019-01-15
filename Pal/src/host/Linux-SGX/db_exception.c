@@ -407,6 +407,7 @@ void _DkExceptionHandler (unsigned int exit_info, sgx_context_t * uc)
         restore_sgx_context(uc, xregs_state, false);
         /* NOTREACHED */
     }
+    SGX_DBG(DBG_E, "rip 0x%08lx\n", uc->rip);
 
     PAL_CONTEXT ctx;
 
