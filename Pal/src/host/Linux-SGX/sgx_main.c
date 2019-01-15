@@ -231,6 +231,7 @@ int initialize_enclave (struct pal_enclave * enclave)
     void *               tcs_addrs[MAX_DBG_THREADS];
     unsigned long        heap_min = DEAFULT_HEAP_MIN;
 
+    SGX_DBG(DBG_E, "loading %s", ENCLAVE_FILENAME);
     enclave_image = INLINE_SYSCALL(open, 3, ENCLAVE_FILENAME, O_RDONLY, 0);
     if (IS_ERR(enclave_image)) {
         SGX_DBG(DBG_E, "Cannot find %s\n", ENCLAVE_FILENAME);
@@ -794,6 +795,7 @@ static int load_enclave (struct pal_enclave * enclave,
     }
 
     if (exec_uri) {
+        SGX_DBG(DBG_E, "exec_uri: %s\n", exec_uri);
         enclave->exec = INLINE_SYSCALL(open, 3,
                                        exec_uri + static_strlen("file:"),
                                        O_RDONLY|O_CLOEXEC, 0);
@@ -952,7 +954,7 @@ int main (int argc, char ** argv, char ** envp)
 
     int fd = INLINE_SYSCALL(open, 3, exec_uri + 5, O_RDONLY|O_CLOEXEC, 0);
     if (IS_ERR(fd)) {
-        SGX_DBG(DBG_E, "Executable not found\n");
+        SGX_DBG(DBG_E, "Executable not found: %s\n", exec_uri);
         goto usage;
     }
 
