@@ -220,7 +220,8 @@ extern struct pal_enclave_config {
 #define DBG_M   0x20
 
 #ifdef DEBUG
-# define DBG_LEVEL (DBG_E|DBG_I|DBG_D|DBG_S)
+# define DBG_LEVEL (DBG_E|DBG_I|DBG_D|DBG_S|DBG_P|DBG_M)
+//# define DBG_LEVEL (DBG_E|DBG_I|DBG_D|DBG_S)
 #else
 # define DBG_LEVEL (DBG_E)
 #endif
