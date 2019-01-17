@@ -76,12 +76,17 @@ int _DkVirtualMemoryAlloc (void ** paddr, uint64_t size, int alloc_type, int pro
     if (size == 0)
         __asm__ volatile ("int $3");
 
+    SGX_DBG(DBG_M, "addr %p size 0x%08lx alloc_type 0x%x prot 0x%x\n",
+            addr, size, alloc_type, prot);
     mem = get_reserved_pages(addr, size);
+    SGX_DBG(DBG_M, "mem %p \n", mem);
     if (!mem)
         return addr ? -PAL_ERROR_DENIED : -PAL_ERROR_NOMEM;
     if (addr && mem != addr) {
         // TODO: This case should be made impossible by fixing
         // `get_reserved_pages` semantics.
+        SGX_DBG(DBG_M, "failed to allocate addr %p mem %p\n",
+                addr, mem);
         free_pages(mem, size);
         return -PAL_ERROR_INVAL; // `addr` was unaligned.
     }
