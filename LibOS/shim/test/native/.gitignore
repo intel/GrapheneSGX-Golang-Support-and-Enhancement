@@ -2,6 +2,8 @@
 *.sig
 *.token
 
+manifest
+
 # generated executables
 alarm
 alarm_loop
@@ -52,7 +54,15 @@ socketpair
 sqrt.m
 start.pthread.m
 static
+static-clone
+static-exec_fork
+static-fork
+static-fork_bomb
+static-fork_exec
+static-vfork
+static-vfork_exec
 sync.pthread
+syscall
 system
 tcp
 test_start_pthread_m.m
