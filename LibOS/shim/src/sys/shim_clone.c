@@ -172,6 +172,8 @@ static int clone_implementation_wrapper(struct clone_args * arg)
     fixup_child_context(tcb->context.regs);
     tcb->context.regs->rsp = (unsigned long)stack;
 
+    debug("child swapping stack to %p return %08lx: %d\n",
+          stack, tcb->context.regs->rip, my_thread->tid);
     restore_context(&tcb->context);
     return 0;
 }
