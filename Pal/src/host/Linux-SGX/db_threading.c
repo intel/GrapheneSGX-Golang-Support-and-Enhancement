@@ -64,14 +64,15 @@ static PAL_IDX pal_assign_tid(void)
 
 void pal_start_thread (uint64_t host_tid)
 {
-    struct pal_handle_thread *new_thread = NULL, *tmp;
+    PAL_HANDLE new_thread = NULL;
+    struct pal_handle_thread * tmp;
 
     _DkInternalLock(&thread_list_lock);
     LISTP_FOR_EACH_ENTRY(tmp, &thread_list, list)
         if (!tmp->tcs) {
-            new_thread = tmp;
-            new_thread->tid = pal_assign_tid();
-            new_thread->tcs =
+            tmp->tid = pal_assign_tid();
+            new_thread = container_of(tmp, struct pal_handle, thread);
+            new_thread->thread.tcs =
                 enclave_base + GET_ENCLAVE_TLS(tcs_offset);
             break;
         }
@@ -81,14 +82,14 @@ void pal_start_thread (uint64_t host_tid)
         return;
 
     struct thread_param * thread_param =
-            (struct thread_param *) new_thread->param;
+            (struct thread_param *) new_thread->thread.param;
     int (*callback) (void *) = thread_param->callback;
     const void * param = thread_param->param;
     free(thread_param);
-    new_thread->param = NULL;
+    new_thread->thread.param = NULL;
     SET_ENCLAVE_TLS(thread, new_thread);
     SET_ENCLAVE_TLS(common.host_tid, host_tid);
-    SET_ENCLAVE_TLS(common.pal_tid, (uint64_t)new_thread->tid);
+    SET_ENCLAVE_TLS(common.pal_tid, (uint64_t)new_thread->thread.tid);
     SET_ENCLAVE_TLS(ready_for_exceptions, 1UL);
     callback((void *) param);
     _DkThreadExit();

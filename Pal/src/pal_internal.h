@@ -32,6 +32,10 @@
 # error "pal_internal.h can only be included in PAL"
 #endif
 
+#ifndef container_of
+#define container_of(ptr, type, field) ((type *)((char *)(ptr) - offsetof(type, field)))
+#endif
+
 #define PAL_FILE(name) XSTRINGIFY(PAL_DIR) "/" name
 #define RUNTIME_FILE(name) XSTRINGIFY(RUNTIME_DIR) "/" name
 
