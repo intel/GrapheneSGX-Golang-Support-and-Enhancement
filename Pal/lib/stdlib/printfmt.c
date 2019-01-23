@@ -240,6 +240,7 @@ vfprintfmt(int (*_fputch)(void *, int, void *), void * f, void * putdat,
 			num = (unsigned long)
 				(uintptr_t) va_arg(ap, void *);
 #endif
+			padc = '0';
 			base = 16;
 			goto number;
 
