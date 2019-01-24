@@ -86,10 +86,9 @@ int _DkEventWaitTimeout (PAL_HANDLE event, PAL_NUM timeout)
 {
     int ret = 0;
 
+    atomic_inc(&event->event.nwaiters);
     if (!event->event.isnotification || !atomic_read(event->event.signaled)) {
         int64_t waittime = timeout;
-
-        atomic_inc(&event->event.nwaiters);
 
         do {
             ret = ocall_futex((int *) &event->event.signaled->counter,
@@ -105,8 +104,8 @@ int _DkEventWaitTimeout (PAL_HANDLE event, PAL_NUM timeout)
         } while (event->event.isnotification &&
                  !atomic_read(event->event.signaled));
 
-        atomic_dec(&event->event.nwaiters);
     }
+    atomic_dec(&event->event.nwaiters);
 
     return ret;
 }
@@ -115,8 +114,8 @@ int _DkEventWait (PAL_HANDLE event)
 {
     int ret = 0;
 
+    atomic_inc(&event->event.nwaiters);
     if (!event->event.isnotification || !atomic_read(event->event.signaled)) {
-        atomic_inc(&event->event.nwaiters);
 
         do {
             ret = ocall_futex((int *) &event->event.signaled->counter,
@@ -132,8 +131,8 @@ int _DkEventWait (PAL_HANDLE event)
         } while (event->event.isnotification &&
                  !atomic_read(event->event.signaled));
 
-        atomic_dec(&event->event.nwaiters);
     }
+    atomic_dec(&event->event.nwaiters);
 
     return ret;
 }
