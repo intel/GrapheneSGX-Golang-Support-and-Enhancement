@@ -277,6 +277,7 @@ int shim_do_clone (int flags, void * user_stack_addr, int * parent_tidptr,
         ret = -ENOMEM;
         goto failed;
     }
+    debug("new tid %d\n", thread->tid);
 
     IDTYPE tid = thread->tid;
 

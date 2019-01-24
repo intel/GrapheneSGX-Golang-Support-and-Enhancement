@@ -165,8 +165,8 @@ int shim_do_futex (int * uaddr, int op, int val, void * utime,
             uint32_t bitset = (futex_op == FUTEX_WAIT_BITSET) ? (uint32_t) val3 :
                               0xffffffff;
 
-            debug("FUTEX_WAIT: %p (val = %d) vs %d mask = %08x, timeout ptr %p\n",
-                  uaddr, *uaddr, val, bitset, utime);
+            debug("FUTEX_WAIT: %p (val = %d) vs %d mask = %08x, timeout ptr %p timeout_us %ld\n",
+                  uaddr, *uaddr, val, bitset, utime, timeout_us);
 
             if (*uaddr != val) {
                 ret = -EAGAIN;
