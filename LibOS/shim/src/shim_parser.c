@@ -660,8 +660,12 @@ static void parse_clone_flags (va_list ap)
             flags &= ~all_flags[i].flag;
         }
 
-    if (flags)
-        PRINTF("|0x%x", flags);
+    if (flags) {
+        if (0 <= flags && flags <= NUM_KNOWN_SIGS)
+            PRINTF("|%s", signal_name(flags));
+        else
+            PRINTF("|0x%x", flags);
+    }
 }
 
 static void parse_mmap_prot (va_list ap)
