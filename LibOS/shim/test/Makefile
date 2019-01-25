@@ -1,4 +1,4 @@
-subdirs = native
+subdirs = native regression
 
 SYS ?= $(shell gcc -dumpmachine)
 export SYS
