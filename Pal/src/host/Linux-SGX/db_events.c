@@ -21,6 +21,7 @@
  */
 
 #include "pal_defs.h"
+#include "pal_linux_error.h"
 #include "pal_linux_defs.h"
 #include "pal.h"
 #include "pal_internal.h"
@@ -79,7 +80,7 @@ int _DkEventSet (PAL_HANDLE event, int wakeup)
             return unix_to_pal_error(ERRNO(ret));
     }
 
-    return ret;
+    return IS_ERR(ret) ? PAL_ERROR_TRYAGAIN : ret;
 }
 
 int _DkEventWaitTimeout (PAL_HANDLE event, PAL_NUM timeout)
@@ -90,9 +91,12 @@ int _DkEventWaitTimeout (PAL_HANDLE event, PAL_NUM timeout)
     if (!event->event.isnotification || !atomic_read(event->event.signaled)) {
         int64_t waittime = timeout;
 
+        SGX_DBG(DBG_E, "futex loop timeout %ld\n", timeout);
         do {
+            SGX_DBG(DBG_E, "futex loop in\n");
             ret = ocall_futex((int *) &event->event.signaled->counter,
                               FUTEX_WAIT, 0, timeout != NO_TIMEOUT ? &waittime : NULL);
+            SGX_DBG(DBG_E, "futex loop in ret %d\n", ret);
             if (IS_ERR(ret)) {
                 if (ERRNO(ret) == EWOULDBLOCK) {
                     ret = 0;
@@ -103,7 +107,7 @@ int _DkEventWaitTimeout (PAL_HANDLE event, PAL_NUM timeout)
             }
         } while (event->event.isnotification &&
                  !atomic_read(event->event.signaled));
-
+        SGX_DBG(DBG_E, "event loop out ret %d\n", ret);
     }
     atomic_dec(&event->event.nwaiters);
 

@@ -24,6 +24,7 @@
 
 #include "pal_defs.h"
 #include "pal_linux_defs.h"
+#include "pal_linux_error.h"
 #include "pal.h"
 #include "pal_internal.h"
 #include "pal_linux.h"
@@ -85,13 +86,12 @@ int _DkMutexLockTimeout (struct mutex_handle * m, PAL_NUM timeout)
         ret = ocall_futex((int *) m->locked, FUTEX_WAIT, MUTEX_LOCKED, timeout == NO_TIMEOUT ? NULL : &waittime);
 
         if (IS_ERR(ret)) {
-            if (ERRNO(ret) == EWOULDBLOCK) {
-                    ret = -PAL_ERROR_TRYAGAIN;
-                    atomic_dec(&m->nwaiters);
+            if (ERRNO(ret) == EWOULDBLOCK && timeout != NO_TIMEOUT) {
+                ret = -PAL_ERROR_TRYAGAIN;
             } else {
                 ret = unix_to_pal_error(ERRNO(ret));
-                atomic_dec(&m->nwaiters);
             }
+            atomic_dec(&m->nwaiters);
             goto out;
         }
     }
