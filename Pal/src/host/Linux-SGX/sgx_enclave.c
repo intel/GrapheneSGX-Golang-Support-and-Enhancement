@@ -826,6 +826,9 @@ noreturn void __abort(void) {
     warn("[urts %ld]\n", INLINE_SYSCALL(gettid, 0));
 #endif
 
+    __asm__ volatile("hlt");
+    int tid = INLINE_SYSCALL(gettid, 0);
+    INLINE_SYSCALL(tkill, 2, tid, SIGABRT);
     INLINE_SYSCALL(exit_group, 1, -1);
     while (true) {
         /* nothing */;
