@@ -254,7 +254,7 @@ static int _DkPhysicalMemoryMapCma (
     }
     if (ret != size) {
         printf("process_vm_readv failure: ret: %d size: %ld\n", ret, size);
-        return PAL_ERROR_INVAL;
+        return -PAL_ERROR_INVAL;
     }
 
     for (i = 0; i < entries; i++) {
