@@ -88,6 +88,7 @@ void pal_start_thread (uint64_t host_tid)
     new_thread->param = NULL;
     SET_ENCLAVE_TLS(thread, new_thread);
     SET_ENCLAVE_TLS(common.host_tid, host_tid);
+    SET_ENCLAVE_TLS(common.pal_tid, (uint64_t)new_thread->tid);
     SET_ENCLAVE_TLS(ready_for_exceptions, 1UL);
     callback((void *) param);
     _DkThreadExit();

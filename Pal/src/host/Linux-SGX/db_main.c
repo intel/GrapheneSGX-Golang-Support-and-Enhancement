@@ -389,6 +389,7 @@ void pal_linux_main(char * uptr_args, uint64_t args_size,
         enclave_base + GET_ENCLAVE_TLS(tcs_offset);
     SET_ENCLAVE_TLS(thread, (__pal_control.first_thread = first_thread));
     SET_ENCLAVE_TLS(common.host_tid, host_tid);
+    SET_ENCLAVE_TLS(common.pal_tid, (uint64_t)first_thread->thread.tid);
 
     /* call main function */
     pal_main(pal_sec.instance_id, manifest, exec,
