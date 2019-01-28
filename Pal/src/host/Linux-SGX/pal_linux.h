@@ -85,10 +85,10 @@ bool stataccess (struct stat * stats, int acc);
 #ifdef IN_ENCLAVE
 
 struct pal_sec;
-void pal_linux_main(char * uptr_args, size_t args_size,
-                    char * uptr_env, size_t env_size,
-                    struct pal_sec * uptr_sec_info);
-void pal_start_thread (void);
+void pal_linux_main(char * uptr_args, uint64_t args_size,
+                    char * uptr_env, uint64_t env_size,
+                    struct pal_sec * uptr_sec_info, uint64_t host_tid);
+void pal_start_thread (uint64_t host_tid);
 
 /* Locking and unlocking of Mutexes */
 int __DkMutexCreate (struct mutex_handle * mut);

@@ -196,7 +196,7 @@ extern void * enclave_top;
 
 void pal_linux_main(char * uptr_args, uint64_t args_size,
                     char * uptr_env, uint64_t env_size,
-                    struct pal_sec * uptr_sec_info)
+                    struct pal_sec * uptr_sec_info, uint64_t host_tid)
 {
     /*
      * Our arguments are comming directly from the urts. We are responsible to
@@ -388,6 +388,7 @@ void pal_linux_main(char * uptr_args, uint64_t args_size,
     first_thread->thread.tcs =
         enclave_base + GET_ENCLAVE_TLS(tcs_offset);
     SET_ENCLAVE_TLS(thread, (__pal_control.first_thread = first_thread));
+    SET_ENCLAVE_TLS(common.host_tid, host_tid);
 
     /* call main function */
     pal_main(pal_sec.instance_id, manifest, exec,

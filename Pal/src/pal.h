@@ -89,6 +89,7 @@ typedef union pal_handle
 
 typedef struct pal_tcb {
     struct pal_tcb * self;
+    uint64_t host_tid;
     /* uint64_t for alignment */
     uint64_t libos_tcb[PAL_LIBOS_TCB_SIZE / sizeof(uint64_t)];
     uint64_t private[];
