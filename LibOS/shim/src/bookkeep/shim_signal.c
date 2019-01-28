@@ -897,7 +897,9 @@ int __handle_signal (shim_tcb_t * tcb, int sig,
         ((context_is_internal(context) &&
           !is_signal_allowed(context)) ||
          DkInPal(context))) {
-        debug("__handle_signal: in libos or pal. just returning\n");
+        debug("__handle_signal: in libos. just returning "
+              "rip 0x%08lx +0x%08lx\n",
+              context->rip, (void *) context->rip - (void *) &__load_address);
         return 0;
     }
 #endif
