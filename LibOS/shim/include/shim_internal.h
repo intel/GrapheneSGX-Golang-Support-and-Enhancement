@@ -169,7 +169,8 @@ static inline void do_pause (void);
 #if USE_PAUSE == 1
 # define PAUSE() do { do_pause(); } while (0)
 #else
-# define PAUSE() do { __asm__ volatile ("int $3"); } while (0)
+//# define PAUSE() do { __asm__ volatile ("int $3"); } while (0)
+# define PAUSE() do { __asm__ volatile ("hlt"); } while (0)
 #endif
 
 #define BUG()                                                               \
