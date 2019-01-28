@@ -212,6 +212,8 @@ static void __put_ipc_port (struct shim_ipc_port * pobj)
 /* This should be called with the ipc_helper_lock held */
 static inline void restart_ipc_helper (bool need_create)
 {
+    debug("need_create %d ipc_helper_state %d\n",
+          need_create, ipc_helper_state);
     switch (ipc_helper_state) {
         case HELPER_UNINITIALIZED:
             ipc_helper_state = HELPER_DELAYED;
@@ -1103,6 +1105,7 @@ static int create_ipc_helper (void)
  */
 int exit_with_ipc_helper (bool handover, struct shim_thread ** ret)
 {
+    debug("handoever %d\n", handover);
     *ret = NULL;
     if (IN_HELPER() || ipc_helper_state != HELPER_ALIVE)
         return 0;
