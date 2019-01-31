@@ -409,18 +409,24 @@ void _DkExceptionHandler (unsigned int exit_info, sgx_context_t * uc)
         printf("*** An unexpected AEX vector occurred inside PAL. "
                "Exiting the thread. *** \n"
                "(vector = 0x%x, type = 0x%x valid = %d, RIP = +0x%08lx)\n"
+               "tid: %d host tid: %ld rip: 0x%08lx\n"
                "rax: 0x%08lx rcx: 0x%08lx rdx: 0x%08lx rbx: 0x%08lx\n"
                "rsp: 0x%08lx rbp: 0x%08lx rsi: 0x%08lx rdi: 0x%08lx\n"
                "r8 : 0x%08lx r9 : 0x%08lx r10: 0x%08lx r11: 0x%08lx\n"
                "r12: 0x%08lx r13: 0x%08lx r14: 0x%08lx r15: 0x%08lx\n"
-               "rflags: 0x%08lx rip: 0x%08lx\n",
+               "rflags: 0x%08lx rip: 0x%08lx\n"
+               "flags: 0x%08lx pending: 0x%lx nest: %ld maker: %p\n",
                ei.info.vector, ei.info.type, ei.info.valid,
                uc->rip - (uintptr_t) TEXT_START,
+               current_tid(), GET_ENCLAVE_TLS(common.host_tid), uc->rip,
                uc->rax, uc->rcx, uc->rdx, uc->rbx,
                uc->rsp, uc->rbp, uc->rsi, uc->rdi,
                uc->r8, uc->r9, uc->r10, uc->r11,
                uc->r12, uc->r13, uc->r14, uc->r15,
-               uc->rflags, uc->rip);
+               uc->rflags, uc->rip,
+               GET_ENCLAVE_TLS(flags), GET_ENCLAVE_TLS(pending_async_event),
+               GET_ENCLAVE_TLS(event_nest.counter),
+               GET_ENCLAVE_TLS(ocall_marker));
 #ifdef DEBUG
         printf("%s\n",
                alloca_bytes2hexdump((uint8_t*)uc->rip,
