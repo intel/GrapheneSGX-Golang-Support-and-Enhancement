@@ -1,5 +1,3 @@
-include ../src/Makefile.Host
-
 CC	= gcc
 CFLAGS	= -Wall -O2 -std=c11 -fno-builtin -nostdlib \
 	  -I../include/pal -I../lib
