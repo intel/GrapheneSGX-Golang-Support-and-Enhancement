@@ -483,8 +483,18 @@ int check_last_thread (struct shim_thread * self)
         if (tmp->tid &&
             (!self || tmp->tid != self->tid) && tmp->in_vm && tmp->is_alive) {
             debug("check_last_thread: thread %d is alive\n", tmp->tid);
+            IDTYPE tid = tmp->tid;
             unlock(&thread_list_lock);
-            return tmp->tid;
+
+            /*
+             * BUG WORK AROUND:
+             * In shim, there are race conditions between thread wakeup
+             * and thread sleep. So often exit_group() fails to complete.
+             * TODO: once the race condition is fixed, remove this.
+             */
+            do_kill_proc(self->tgid, self->tgid, SIGKILL, false);
+
+            return tid;
         }
     }
 
