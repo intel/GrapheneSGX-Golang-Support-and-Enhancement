@@ -261,8 +261,9 @@ static void print_regs(PAL_CONTEXT * ctx)
           ctx->r8, ctx->r9, ctx->r10, ctx->r11);
     debug("r12: 0x%08lx r13: 0x%08lx r14: 0x%08lx r15: 0x%08lx\n",
           ctx->r12, ctx->r13, ctx->r14, ctx->r15);
-    debug("rflags: 0x%08lx rip: 0x%08lx\n",
-          ctx->efl, ctx->rip);
+    debug("rflags: 0x%08lx rip: 0x%08lx +0x%08lx\n",
+          ctx->efl, ctx->rip,
+          (void *) ctx->rip - (void *) &__load_address);
     debug("csgsfs: 0x%08lx err: 0x%08lx trapno %ld odlmask 0x%08lx cr2: 0x%08lx\n",
           ctx->csgsfs, ctx->err, ctx->trapno, ctx->oldmask, ctx->cr2);
     MASTER_UNLOCK();
@@ -303,7 +304,9 @@ static void arithmetic_error_upcall (PAL_PTR event, PAL_NUM arg, PAL_CONTEXT * c
 
 static void memfault_upcall (PAL_PTR event, PAL_NUM arg, PAL_CONTEXT * context)
 {
-    debug("memfault_upcall rsp: %08lx rip %08lx\n", context->rsp, context->rip);
+    debug("memfault_upcall rsp: %08lx rip %08lx +0x%08lx\n",
+          context->rsp, context->rip,
+          (void *) context->rip - (void *) &__load_address);
     sigreturn_jmp_emulate(context);
     shim_tcb_t * tcb = shim_get_tls();
     assert(tcb);
@@ -325,7 +328,8 @@ static void memfault_upcall (PAL_PTR event, PAL_NUM arg, PAL_CONTEXT * context)
         debug("memory fault at 0x%08lx (IP = 0x%08lx)\n", arg, context->IP);
 
     print_regs(context);
-    debug("inst: 0x%08lx\n", context->IP);
+    debug("inst: 0x%08lx +0x%08lx\n", context->IP,
+          (void *) context->rip - (void *) &__load_address);
     debug_hex((unsigned long*)context->IP, 32);
 
     struct shim_vma_val vma;
@@ -602,7 +606,9 @@ static void illegal_upcall (PAL_PTR event, PAL_NUM arg, PAL_CONTEXT * context)
 static void quit_upcall (PAL_PTR event, PAL_NUM arg, PAL_CONTEXT * context)
 {
     __UNUSED(arg);
-    debug("quit_upcall rsp: %08lx rip %08lx\n", context->rsp, context->rip);
+    debug("quit_upcall rsp: %08lx rip %08lx +0x%08lx\n",
+          context->rsp, context->rip,
+          (void *) context->rip - (void *) &__load_address);
     sigreturn_jmp_emulate(context);
     if (!is_internal_tid(get_cur_tid())) {
         deliver_signal(event, ALLOC_SIGINFO(SIGTERM, SI_USER, si_pid, 0), context);
@@ -613,7 +619,9 @@ static void quit_upcall (PAL_PTR event, PAL_NUM arg, PAL_CONTEXT * context)
 static void suspend_upcall (PAL_PTR event, PAL_NUM arg, PAL_CONTEXT * context)
 {
     __UNUSED(arg);
-    debug("suspend_upcall rsp: %08lx rip %08lx\n", context->rsp, context->rip);
+    debug("suspend_upcall rsp: %08lx rip %08lx +0x%08lx\n",
+          context->rsp, context->rip,
+          (void *) context->rip - (void *) &__load_address);
     sigreturn_jmp_emulate(context);
     if (!is_internal_tid(get_cur_tid())) {
         deliver_signal(event, ALLOC_SIGINFO(SIGINT, SI_USER, si_pid, 0), context);
@@ -624,7 +632,9 @@ static void suspend_upcall (PAL_PTR event, PAL_NUM arg, PAL_CONTEXT * context)
 static void resume_upcall (PAL_PTR event, PAL_NUM arg, PAL_CONTEXT * context)
 {
     __UNUSED(arg);
-    debug("resume_upcall rsp: %08lx rip %08lx\n", context->rsp, context->rip);
+    debug("resume_upcall rsp: %08lx rip %08lx +0x%08lx\n",
+          context->rsp, context->rip,
+          (void *) context->rip - (void *) &__load_address);
     sigreturn_jmp_emulate(context);
     shim_tcb_t * tcb = shim_get_tls();
     if (!tcb || !tcb->tp)
@@ -640,8 +650,10 @@ static void resume_upcall (PAL_PTR event, PAL_NUM arg, PAL_CONTEXT * context)
             __preempt_set_delayed(tcb);
         } else {
             //PAL_EVENT * event = (PAL_EVENT *) eventp;
-            debug("resume_upcall rsp: %08lx rip %08lx tid: %d\n",
-                  context->rsp, context->rip, get_cur_tid());
+            debug("resume_upcall rsp: %08lx rip %08lx +0x%08lx tid: %d\n",
+                  context->rsp, context->rip,
+                  (void *) context->rip - (void *) &__load_address,
+                  get_cur_tid());
 
             __handle_signal(tcb, 0, event, context);
         }
@@ -910,7 +922,8 @@ int __handle_signal (shim_tcb_t * tcb, int sig,
          DkInPal(context))) {
         debug("__handle_signal: in libos. just returning "
               "rip 0x%08lx +0x%08lx\n",
-              context->rip, (void *) context->rip - (void *) &__load_address);
+              context->rip,
+              (void *) context->rip - (void *) &__load_address);
         return 0;
     }
 #endif
@@ -1211,15 +1224,15 @@ void append_signal (struct shim_thread * thread, int sig, siginfo_t * info,
 
     if (signal_log) {
         *signal_log = signal;
-        if (wakeup) {
-            debug("resuming thread %u\n", thread->tid);
-            thread_wakeup(thread);
-            DkThreadResume(thread->pal_handle);
-        }
     } else {
         SYS_PRINTF("signal queue is full (TID = %u, SIG = %d)\n",
                    thread->tid, sig);
         free(signal);
+    }
+    if (wakeup) {
+        debug("resuming thread %u\n", thread->tid);
+        thread_wakeup(thread);
+        DkThreadResume(thread->pal_handle);
     }
 }
 
