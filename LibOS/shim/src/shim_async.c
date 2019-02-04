@@ -27,8 +27,10 @@
 #include <pal.h>
 #include <list.h>
 
-#define IDLE_SLEEP_TIME     1000
-#define MAX_IDLE_CYCLES     100
+//#define IDLE_SLEEP_TIME     1000
+//#define MAX_IDLE_CYCLES     100
+#define IDLE_SLEEP_TIME     10000
+#define MAX_IDLE_CYCLES     10
 
 DEFINE_LIST(async_event);
 struct async_event {
