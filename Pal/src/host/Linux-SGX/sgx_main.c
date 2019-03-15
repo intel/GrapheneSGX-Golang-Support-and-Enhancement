@@ -231,7 +231,7 @@ int initialize_enclave (struct pal_enclave * enclave)
     void *               tcs_addrs[MAX_DBG_THREADS];
     unsigned long        heap_min = DEAFULT_HEAP_MIN;
 
-    SGX_DBG(DBG_E, "loading %s", ENCLAVE_FILENAME);
+    SGX_DBG(DBG_E, "loading %s\n", ENCLAVE_FILENAME);
     enclave_image = INLINE_SYSCALL(open, 3, ENCLAVE_FILENAME, O_RDONLY, 0);
     if (IS_ERR(enclave_image)) {
         SGX_DBG(DBG_E, "Cannot find %s\n", ENCLAVE_FILENAME);
