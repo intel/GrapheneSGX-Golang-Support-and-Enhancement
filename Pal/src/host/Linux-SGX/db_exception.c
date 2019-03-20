@@ -36,6 +36,8 @@
 #include <linux/signal.h>
 #include <ucontext.h>
 
+#include "go-type.h"
+
 char * __bytes2hexdump(void * hex, size_t size, char * str, size_t len)
 {
     static const char * ch = "0123456789abcdef";
@@ -403,16 +405,24 @@ void _DkExceptionHandler (unsigned int exit_info, sgx_context_t * uc)
     struct ocall_marker_buf * marker = ocall_marker_clear();
     SGX_DBG(DBG_E,
             "uc %p xregs_state %p nest %ld flags 0x%lx async 0x%lx marker %p\n"
-            "\trip 0x%08lx +0x%08lx rsp 0x%08lx\n",
+            "\trip 0x%08lx +0x%08lx rsp 0x%08lx &nest: %p\n",
             uc, xregs_state, nest,
             GET_ENCLAVE_TLS(flags), GET_ENCLAVE_TLS(pending_async_event), marker,
-            uc->rip, uc->rip - (uintptr_t) TEXT_START, uc->rsp);
+            uc->rip, uc->rip - (uintptr_t) TEXT_START, uc->rsp,
+            &nest);
     if (marker)
         SGX_DBG(DBG_E,
                 "marker: rip 0x%08lx +0x%08lx rsp 0x%08lx\n",
                 marker->rip, marker->rip - (uintptr_t) TEXT_START, marker->rsp);
     assert((((uintptr_t)xregs_state) % PAL_XSTATE_ALIGN) == 0);
     save_xregs(xregs_state);
+    static int i = 0;
+    i++;
+    struct go_g *g = get_g();
+    if (g && i > 100)
+        SGX_DBG(DBG_E,
+                "g: lo 0x%08lx hi 0x%08lx guard0 0x%08lx guard1 0x%08lx\n",
+                g->stack.lo, g->stack.hi, g->stackguard0, g->stackguard1);
 
     SGX_DBG(DBG_E, "exit_info 0x%08x\n", exit_info);
     union {
