@@ -152,6 +152,9 @@ void vfprintfmt (int (*_fputch)(void *, int, void *), void * f, void * putdat,
 
 int snprintf (char * buf, int n, const char * fmt, ...) __attribute__((format(printf, 3, 4)));
 
+int ffs (int x);
+int ffsl (long int x);
+
 /* Miscelleneous */
 
 int inet_pton4 (const char *src, size_t len, void *dst);
