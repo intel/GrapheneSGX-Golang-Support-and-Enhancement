@@ -10,6 +10,13 @@
 	jmp .Lfail_loop\@
 .endm
 
+.macro WRFSBASE_RBX
+	.byte 0xf3, 0x48, 0x0f, 0xae, 0xd3 /* WRFSBASE %RBX */
+.endm
+
+	.extern ecall_table
+	.extern enclave_ecall_pal_main
+
 	.global enclave_entry
 	.type enclave_entry, @function
 
@@ -585,7 +592,7 @@ __morestack:
 	movq %gs:SGX_FSBASE, %rbx
 	cmpq $0, %rbx
 	je .Lno_fsbase
-	.byte 0xf3, 0x48, 0x0f, 0xae, 0xd3 /* WRFSBASE %RBX */
+	WRFSBASE_RBX
 .Lno_fsbase:
 
 	popq %rbp
