@@ -32,6 +32,7 @@
 #include <shim_vma.h>
 #include <shim_checkpoint.h>
 #include <shim_profile.h>
+#include <shim_vdso.h>
 
 #include <errno.h>
 
@@ -55,6 +56,7 @@ enum object_type {
     OBJECT_MAPPED       = 2,
     OBJECT_REMAP        = 3,
     OBJECT_USER         = 4,
+    OBJECT_VDSO         = 5,
 };
 
 /* Structure describing a loaded shared object.  The `l_next' and `l_prev'
@@ -147,6 +149,7 @@ struct link_map * lookup_symbol (const char * undef_name, ElfW(Sym) ** ref);
 
 static struct link_map * loaded_libraries = NULL;
 static struct link_map * internal_map = NULL, * interp_map = NULL;
+static struct link_map * vdso_map = NULL;
 
 /* This macro is used as a callback from the ELF_DYNAMIC_RELOCATE code.  */
 static ElfW(Addr) resolve_map (const char ** strtab, ElfW(Sym) ** ref)
@@ -374,7 +377,7 @@ __map_elf_object (struct shim_handle * file,
     const char * errstring __attribute__((unused)) = NULL;
     int ret;
 
-    if (type != OBJECT_INTERNAL && !file) {
+    if (type != OBJECT_INTERNAL && type != OBJECT_VDSO && !file) {
         errstring = "shared object has to be backed by file";
         goto call_lose;
     }
@@ -588,9 +591,9 @@ do_remap:
             }
 
 #if BOOKKEEP_INTERNAL_OBJ == 0
-                if (type != OBJECT_INTERNAL && type != OBJECT_USER)
+                if (type != OBJECT_INTERNAL && type != OBJECT_USER && type != OBJECT_VDSO)
 #else
-                if (type != OBJECT_USER)
+                if (type != OBJECT_USER && type != OBJECT_VDSO)
 #endif
                     bkeep_mmap(mapaddr, c->mapend - c->mapstart, c->prot,
                                c->flags|MAP_FIXED|MAP_PRIVATE|
@@ -622,7 +625,9 @@ postmap:
 
             if (type != OBJECT_MAPPED &&
                 type != OBJECT_INTERNAL &&
-                type != OBJECT_USER && zeropage > zero) {
+                type != OBJECT_USER &&
+                type != OBJECT_VDSO &&
+                zeropage > zero) {
                 /* Zero the final part of the last page of the segment.  */
                 if (__builtin_expect ((c->prot & PROT_WRITE) == 0, 0)) {
                     /* Dag nab it.  */
@@ -646,7 +651,8 @@ postmap:
             if (zeroend > zeropage) {
                 if (type != OBJECT_MAPPED &&
                     type != OBJECT_INTERNAL &&
-                    type != OBJECT_USER) {
+                    type != OBJECT_USER &&
+                    type != OBJECT_VDSO) {
                     PAL_PTR mapat = DkVirtualMemoryAlloc((void *)zeropage, zeroend - zeropage,
                                                          0, c->prot);
                     if (__builtin_expect (!mapat, 0)) {
@@ -656,9 +662,9 @@ postmap:
                 }
 
 #if BOOKKEEP_INTERNAL_OBJ == 0
-                if (type != OBJECT_INTERNAL && type != OBJECT_USER)
+                if (type != OBJECT_INTERNAL && type != OBJECT_USER && type != OBJECT_VDSO)
 #else
-                if (type != OBJECT_USER)
+                if (type != OBJECT_USER && type != OBJECT_VDSO)
 #endif
                     bkeep_mmap((void *) zeropage, zeroend - zeropage, c->prot,
                                MAP_ANONYMOUS|MAP_PRIVATE|MAP_FIXED|
@@ -1053,7 +1059,7 @@ static int __load_elf_object (struct shim_handle * file, void * addr,
         goto out;
     }
 
-    if (type != OBJECT_INTERNAL)
+    if (type != OBJECT_INTERNAL && type != OBJECT_VDSO)
         do_relocate_object(map);
 
     if (internal_map) {
@@ -1063,6 +1069,8 @@ static int __load_elf_object (struct shim_handle * file, void * addr,
 
     if (type == OBJECT_INTERNAL)
         internal_map = map;
+    if (type == OBJECT_VDSO)
+        vdso_map = map;
 
     if (type != OBJECT_REMAP) {
         if (file) {
@@ -1257,14 +1265,21 @@ do_lookup_map (ElfW(Sym) * ref, const char * undef_name,
 /* Inner part of the lookup functions.  We return a value > 0 if we
    found the symbol, the value 0 if nothing is found and < 0 if
    something bad happened.  */
-static int do_lookup (const char * undef_name, ElfW(Sym) * ref,
-                      struct sym_val * result)
+static ElfW(Sym) *
+__do_lookup (const char * undef_name, ElfW(Sym) * ref,
+             struct link_map * map)
 {
     const uint_fast32_t fast_hash = elf_fast_hash(undef_name);
     const long int hash = elf_hash(undef_name);
+    return do_lookup_map(ref, undef_name, fast_hash, hash, map);
+}
+
+static int do_lookup (const char * undef_name, ElfW(Sym) * ref,
+                      struct sym_val * result)
+{
     ElfW(Sym) *sym = NULL;
 
-    sym = do_lookup_map(ref, undef_name, fast_hash, hash, internal_map);
+    sym = __do_lookup(undef_name, ref, internal_map);
 
     if (!sym)
         return 0;
@@ -1295,7 +1310,6 @@ static int do_lookup (const char * undef_name, ElfW(Sym) * ref,
     /* We have not found anything until now.  */
     return 0;
 }
-
 
 /* Search loaded objects' symbol tables for a definition of the symbol
    UNDEF_NAME, perhaps with a requested version for the symbol.
@@ -1469,11 +1483,59 @@ int remove_loaded_libraries (void)
     return 0;
 }
 
+static int init_vdso_map(void)
+{
+    __load_elf_object(NULL, vdso_so, OBJECT_VDSO, NULL);
+    vdso_map->l_name = "vDSO";
+
+    if (!DkVirtualMemoryProtect(ALIGN_DOWN((void*)vdso_so),
+                                ALIGN_UP(sizeof(vdso_so)),
+                                PAL_PROT_READ | PAL_PROT_WRITE)) {
+            return -PAL_ERRNO;
+    }
+
+    struct {
+        const char *name;
+        uintptr_t value;
+    } vsyms[] = {
+        {
+            .name = "__vdso_clock_gettime",
+            .value = (uintptr_t)&__shim_clock_gettime,
+        },
+        {
+            .name = "__vdso_gettimeofday",
+            .value = (uintptr_t)&__shim_gettimeofday,
+        },
+        {
+            .name = "__vdso_time",
+            .value = (uintptr_t)&__shim_time,
+        },
+        {
+            .name = "__vdso_getcpu",
+            .value = (uintptr_t)&__shim_getcpu,
+        }
+    };
+    for (size_t i = 0; i < sizeof(vsyms)/sizeof(vsyms[0]); i++) {
+        ElfW(Sym) *sym = __do_lookup(vsyms[i].name, NULL, vdso_map);
+        if (sym == NULL) {
+            debug("vDSO: unfound symbol value for %s\n", vsyms[i].name);
+        }
+        sym->st_value = vsyms[i].value - vdso_map->l_addr;
+    }
+
+    if (!DkVirtualMemoryProtect(ALIGN_DOWN((void*)vdso_so),
+                                ALIGN_UP(sizeof(vdso_so)),
+                                PAL_PROT_READ | PAL_PROT_EXEC)) {
+            return -PAL_ERRNO;
+    }
+    return 0;
+}
+
 int init_internal_map (void)
 {
     __load_elf_object(NULL, &__load_address, OBJECT_INTERNAL, NULL);
     internal_map->l_name = "libsysdb.so";
-    return 0;
+    return init_vdso_map();
 }
 
 int init_loader (void)
@@ -1564,7 +1626,7 @@ noreturn void execute_elf_object (struct shim_handle * exec,
     assert((void*)argcp + sizeof(long) == argp || argp == NULL);
 
     /* populate ELF aux vectors */
-    assert(REQUIRED_ELF_AUXV >= 7); /* stack allocated enough space */
+    assert(REQUIRED_ELF_AUXV >= 8); /* stack allocated enough space */
 
     auxp[0].a_type = AT_PHDR;
     auxp[0].a_un.a_val = (__typeof(auxp[0].a_un.a_val)) exec_map->l_phdr;
@@ -1578,12 +1640,14 @@ noreturn void execute_elf_object (struct shim_handle * exec,
     auxp[4].a_un.a_val = interp_map ? interp_map->l_addr : 0;
     auxp[5].a_type = AT_RANDOM;
     auxp[5].a_un.a_val = 0; /* filled later */
-    auxp[6].a_type = AT_NULL;
-    auxp[6].a_un.a_val = 0;
+    auxp[6].a_type = AT_SYSINFO_EHDR;
+    auxp[6].a_un.a_val = (uint64_t)vdso_so;
+    auxp[7].a_type = AT_NULL;
+    auxp[7].a_un.a_val = 0;
 
     /* populate extra memory space for aux vector data */
     assert(REQUIRED_ELF_AUXV_SPACE >= 16); /* stack allocated enough space */
-    ElfW(Addr) auxp_extra = (ElfW(Addr))&auxp[7];
+    ElfW(Addr) auxp_extra = (ElfW(Addr))&auxp[8];
 
     ElfW(Addr) random = auxp_extra; /* random 16B for AT_RANDOM */
     int ret = DkRandomBitsRead((PAL_PTR)random, 16);
