@@ -742,9 +742,7 @@ noreturn void* shim_init (int argc, void * args)
     if (cpaddr) {
 restore:
         thread_start_event = DkNotificationEventCreate(PAL_FALSE);
-        RUN_INIT(restore_checkpoint,
-                 &hdr.checkpoint.hdr, &hdr.checkpoint.mem,
-                 (ptr_t) cpaddr, 0);
+        RUN_INIT(restore_checkpoint, &hdr, (ptr_t) cpaddr, 0);
     }
 
     if (PAL_CB(manifest_handle))
