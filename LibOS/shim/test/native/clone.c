@@ -25,11 +25,20 @@ int thread_function (void * argument)
 {
     mypid = getpid();
     int * ptr = (int *) argument;
+    printf("ptr: argument passed %p\n", ptr);
+    fflush(stdout);
     printf("in the child: pid (%016lx) = %d\n", (unsigned long) &mypid, mypid);
+    fflush(stdout);
     printf("in the child: pid = %d\n", getpid());
+    fflush(stdout);
     printf("in the child: tls = %08lx\n", gettls());
+    fflush(stdout);
     printf("child thread exiting\n");
+    fflush(stdout);
+    printf("argument passed %p\n", ptr);
+    fflush(stdout);
     printf("argument passed %d\n", *ptr);
+    fflush(stdout);
     return 0;
 }
 
@@ -53,12 +62,16 @@ int main (int argc, const char ** argv)
     printf("child_stack: %016lx-%016lx\n", (unsigned long) stack,
            (unsigned long) stack + FIBER_STACK);
 
+    printf("&varx: %p\n", &varx);
+    fflush(stdout);
+
     // Call the clone system call to create the child thread
     pid = clone(&thread_function, (void *) stack + FIBER_STACK,
                 CLONE_FS | CLONE_FILES | CLONE_SIGHAND | CLONE_VM,
                 &varx);
 
     printf("clone() creates new thread %d\n", pid);
+    fflush(stdout);
 
     if (pid == -1) {
         perror("clone");
@@ -76,8 +89,11 @@ int main (int argc, const char ** argv)
     free(stack);
 
     printf("in the parent: pid (%016lx) = %d\n", (unsigned long) &mypid, mypid);
+    fflush(stdout);
     printf("in the parent: pid = %d\n", getpid());
+    fflush(stdout);
     printf("in the parent: tls = %08lx\n", gettls());
+    fflush(stdout);
 
     return 0;
 }
