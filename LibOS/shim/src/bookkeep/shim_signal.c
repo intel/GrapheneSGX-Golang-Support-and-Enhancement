@@ -103,7 +103,7 @@ fetch_signal_log (struct shim_thread * thread, int sig)
 
 static void
 __handle_one_signal (shim_tcb_t * tcb, int sig, struct shim_signal * signal,
-                     PAL_EVENT * event);
+                     PAL_PTR event, PAL_CONTEXT * context);
 
 static void __store_info (siginfo_t * info, struct shim_signal * signal)
 {
@@ -179,6 +179,7 @@ void deliver_signal (PAL_PTR event, siginfo_t * info, PAL_CONTEXT * context)
         if ((signal = malloc_copy(signal,sizeof(struct shim_signal))) &&
             (signal_log = allocate_signal_log(cur_thread, sig))) {
             *signal_log = signal;
+            (*signal_log)->pal_context = NULL;
         }
         if (signal && !signal_log) {
             SYS_PRINTF("signal queue is full (TID = %u, SIG = %d)\n",
@@ -186,8 +187,8 @@ void deliver_signal (PAL_PTR event, siginfo_t * info, PAL_CONTEXT * context)
             free(signal);
         }
     } else {
-        if (!__handle_signal(tcb, sig, event))
-            __handle_one_signal(tcb, sig, signal, event);
+        if (!__handle_signal(tcb, sig, event, context))
+            __handle_one_signal(tcb, sig, signal, event, context);
     }
 
     __enable_preempt(tcb);
@@ -581,7 +582,7 @@ static void quit_upcall (PAL_PTR event, PAL_NUM arg, PAL_CONTEXT * context)
     debug("quit_upcall rsp: %08lx rip %08lx\n", context->rsp, context->rip);
     sigreturn_jmp_emulate(context);
     if (!is_internal_tid(get_cur_tid())) {
-        deliver_signal(event, ALLOC_SIGINFO(SIGTERM, SI_USER, si_pid, 0), NULL);
+        deliver_signal(event, ALLOC_SIGINFO(SIGTERM, SI_USER, si_pid, 0), context);
     }
     DkExceptionReturn(event);
 }
@@ -592,12 +593,12 @@ static void suspend_upcall (PAL_PTR event, PAL_NUM arg, PAL_CONTEXT * context)
     debug("suspend_upcall rsp: %08lx rip %08lx\n", context->rsp, context->rip);
     sigreturn_jmp_emulate(context);
     if (!is_internal_tid(get_cur_tid())) {
-        deliver_signal(event, ALLOC_SIGINFO(SIGINT, SI_USER, si_pid, 0), NULL);
+        deliver_signal(event, ALLOC_SIGINFO(SIGINT, SI_USER, si_pid, 0), context);
     }
     DkExceptionReturn(event);
 }
 
-static void resume_upcall (PAL_PTR eventp, PAL_NUM arg, PAL_CONTEXT * context)
+static void resume_upcall (PAL_PTR event, PAL_NUM arg, PAL_CONTEXT * context)
 {
     __UNUSED(arg);
     debug("resume_upcall rsp: %08lx rip %08lx\n", context->rsp, context->rip);
@@ -614,15 +615,15 @@ static void resume_upcall (PAL_PTR eventp, PAL_NUM arg, PAL_CONTEXT * context)
                   (tcb->context.preempt & SIGNAL_DELAYED));
             tcb->context.preempt |= SIGNAL_DELAYED;
         } else {
-            PAL_EVENT * event = (PAL_EVENT *) eventp;
+            //PAL_EVENT * event = (PAL_EVENT *) eventp;
             debug("resume_upcall rsp: %08lx rip %08lx tid: %d\n",
                   context->rsp, context->rip, get_cur_tid());
 
-            __handle_signal(tcb, 0, event);
+            __handle_signal(tcb, 0, event, context);
         }
         __enable_preempt(tcb);
     }
-    DkExceptionReturn(eventp);
+    DkExceptionReturn(event);
 }
 
 int init_signal (void)
@@ -679,23 +680,32 @@ static unsigned int fpstate_size_get(const struct _libc_fpstate * fpstate)
 
 static void __setup_sig_frame(
     shim_tcb_t * tcb, int sig, struct shim_signal * signal,
-    PAL_PTR eventp,
+    PAL_PTR eventp, PAL_CONTEXT * context,
     void (*handler) (int, siginfo_t *, void *), void (*restorer) (void))
 {
     __UNUSED(tcb);
-    PAL_EVENT * event = (PAL_EVENT *) eventp;
+    __UNUSED(eventp);
+    //PAL_EVENT * event = (PAL_EVENT *) eventp;
     //struct shim_thread * thread = (struct shim_thread *) tcb->tp;
 
-    ucontext_t * uc = event->uc;
-    struct _libc_fpstate * fpstate = uc->uc_mcontext.fpregs;
+    //ucontext_t * uc = event->uc;
+    //struct _libc_fpstate * fpstate = uc->uc_mcontext.fpregs;
+    struct _libc_xregs_state * xregs_state =
+        (struct _libc_xregs_state * )context->fpregs;
+    struct _libc_fpstate * fpstate = &xregs_state->fpstate;
     unsigned int fpstate_size = fpstate_size_get(fpstate);
 
-    long sp = uc->uc_mcontext.gregs[REG_RSP];
+    //unsigned long sp = uc->uc_mcontext.gregs[REG_RSP];
+    unsigned long sp = context->rsp;
     sp -= RED_ZONE_SIZE;  /* redzone */
     fpregset_t user_fp = (fpregset_t)ALIGN_DOWN_PTR(sp - fpstate_size, 64UL);
     struct sigframe * user_sigframe = (struct sigframe *)ALIGN_DOWN_PTR(user_fp - sizeof(struct sigframe), 16UL) - 8;
     user_sigframe->restorer = restorer;
-    memcpy(&user_sigframe->uc, uc, sizeof(*uc));
+    //memcpy(&user_sigframe->uc, uc, sizeof(*uc));    //XXX
+    user_sigframe->uc.uc_flags = UC_SIGCONTEXT_SS | UC_STRICT_RESTORE_SS;
+    user_sigframe->uc.uc_link = NULL;
+    memcpy(&user_sigframe->uc.uc_mcontext.gregs, context,
+           sizeof(user_sigframe->uc.uc_mcontext.gregs));
     /* For now sigaltstack isn't supported */
     stack_t * stack = &user_sigframe->uc.uc_stack;
     stack->ss_sp = 0;
@@ -703,14 +713,18 @@ static void __setup_sig_frame(
     stack->ss_size = 0;
     memcpy(&user_sigframe->info, &signal->info, sizeof(signal->info));
     if (fpstate_size > 0) {
+        user_sigframe->uc.uc_flags |= UC_FP_XSTATE;
         memcpy(user_fp, fpstate, fpstate_size);
         user_sigframe->uc.uc_mcontext.fpregs = user_fp;
     } else {
+        user_sigframe->uc.uc_flags &= UC_FP_XSTATE;
         user_sigframe->uc.uc_mcontext.fpregs = NULL;
     }
-    memcpy(&user_sigframe->uc.uc_sigmask, &uc->uc_sigmask,
-           sizeof(user_sigframe->uc.uc_sigmask));
+    //user_sigframe->uc.uc_sigmask; // XXX TODO
+    // memcpy(&user_sigframe->uc.uc_sigmask, &uc->uc_sigmask,
+    //        sizeof(user_sigframe->uc.uc_sigmask));
 
+#if 0
     PAL_CONTEXT * pal_context = signal->pal_context;
     if (pal_context) {
         pal_context->rsp = (long)user_sigframe;
@@ -728,14 +742,22 @@ static void __setup_sig_frame(
     (*gregs)[REG_RSI] = (long)&user_sigframe->info;
     (*gregs)[REG_RDX] = (long)&user_sigframe->uc;
     (*gregs)[REG_RAX] = 0;
+#endif
 
     // _DkExceptionReturn overwrite uc.uc_mcontext.gregs
     // PAL_CONTEXT == greg_t
-    memcpy(&event->context, gregs, sizeof(PAL_CONTEXT));
+    //memcpy(&event->context, gregs, sizeof(PAL_CONTEXT));
+    context->rsp = (long)user_sigframe;
+    context->rip = (long)handler;
+    context->rdi = (long)signal->info.si_signo;
+    context->rsi = (long)&user_sigframe->info;
+    context->rdx = (long)&user_sigframe->uc;
+    context->rax = 0;
 
     // keep fpu state to user signal handler
-    uc->uc_mcontext.fpregs = NULL;
-    uc->uc_flags &= ~UC_FP_XSTATE;
+    // uc->uc_mcontext.fpregs = NULL;
+    // uc->uc_flags &= ~UC_FP_XSTATE;
+    context->fpregs = NULL;
 
     debug("deliver signal handler to user stack %p (%d, %p, %p)\n",
           handler, sig, &signal->info, &signal->context);
@@ -775,7 +797,7 @@ static void get_signal_handler(struct shim_thread * thread, int sig,
 
 static void
 __handle_one_signal (shim_tcb_t * tcb, int sig, struct shim_signal * signal,
-                     PAL_EVENT * event)
+                     PAL_PTR event, PAL_CONTEXT * context)
 {
     struct shim_thread * thread = (struct shim_thread *) tcb->tp;
     void (*handler) (int, siginfo_t *, void *) = NULL;
@@ -801,11 +823,12 @@ __handle_one_signal (shim_tcb_t * tcb, int sig, struct shim_signal * signal,
     if (!signal->context_stored)
         __store_context(tcb, NULL, signal);
 
-    if (event != NULL &&
-        (!context_is_internal(&event->context) ||
-         is_signal_allowed(&event->context)) &&
-        !DkInPal(&event->context)) {
-        __setup_sig_frame(tcb, sig, signal, event, handler, restorer);
+    if (context != NULL &&
+        (!context_is_internal(context) ||
+         is_signal_allowed(context)) &&
+        !DkInPal(context)) {
+        __setup_sig_frame(tcb, sig, signal, event, context,
+                          handler, restorer);
     } else {
         /*
          * host signal handler is called during PAL or LibOS.
@@ -822,11 +845,13 @@ __handle_one_signal (shim_tcb_t * tcb, int sig, struct shim_signal * signal,
     }
 }
 
-int __handle_signal (shim_tcb_t * tcb, int sig, PAL_EVENT * event)
+int __handle_signal (shim_tcb_t * tcb, int sig,
+                     PAL_PTR event, PAL_CONTEXT * context)
 {
-    if (event == NULL)
+    if (event == NULL || context == NULL)
         return 0;
 
+#if 0
     if (event != NULL &&
         ((context_is_internal(&event->context) &&
           !is_signal_allowed(&event->context)) ||
@@ -836,6 +861,15 @@ int __handle_signal (shim_tcb_t * tcb, int sig, PAL_EVENT * event)
               event->context.rip, (void *) event->context.rip - (void *) &__load_address);
         return 0;
     }
+#else
+    if (context != NULL &&
+        ((context_is_internal(context) &&
+          !is_signal_allowed(context)) ||
+         DkInPal(context))) {
+        debug("__handle_signal: in libos or pal. just returning\n");
+        return 0;
+    }
+#endif
 
     struct shim_thread * thread = (struct shim_thread *) tcb->tp;
     int begin_sig = 1, end_sig = NUM_KNOWN_SIGS;
@@ -859,11 +893,11 @@ int __handle_signal (shim_tcb_t * tcb, int sig, PAL_EVENT * event)
         if (!signal->context_stored)
             __store_context(tcb, NULL, signal);
 
-        __handle_one_signal(tcb, sig, signal, event);
+        __handle_one_signal(tcb, sig, signal, event, context);
         free(signal);
         DkThreadYieldExecution();
         tcb->context.preempt &= ~SIGNAL_DELAYED;
-        if (event != NULL)
+        if (event != NULL && context != NULL)
             return 1;
     }
 
@@ -910,7 +944,7 @@ void handle_signal (bool delayed_only)
         tcb->context.preempt |= SIGNAL_DELAYED;
         set_bit(SHIM_FLAG_SIGPENDING, &tcb->flags);
     } else if (!(delayed_only && !(tcb->context.preempt & SIGNAL_DELAYED))) {
-        __handle_signal(tcb, 0, NULL);
+        __handle_signal(tcb, 0, NULL, NULL);
     }
 
     __enable_preempt(tcb);
