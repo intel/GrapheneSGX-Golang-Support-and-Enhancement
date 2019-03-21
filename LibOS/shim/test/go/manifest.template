@@ -1,0 +1,35 @@
+loader.preload = file:$(SHIMPATH)
+loader.env.LD_LIBRARY_PATH = /lib
+loader.debug_type = inline
+# loader.debug_type = none
+loader.syscall_symbol = syscalldb
+
+fs.mount.lib.type = chroot
+fs.mount.lib.path = /lib
+fs.mount.lib.uri = file:$(LIBCDIR)
+
+fs.mount.bin.type = chroot
+fs.mount.bin.path = /bin
+fs.mount.bin.uri = file:/bin
+
+sys.brk.size = 32M
+sys.stack.size = 4M
+
+# allow to bind on port 8000
+net.allow_bind.1 = 127.0.0.1:8000
+# allow to connect to port 8000
+net.allow_peer.1 = 127.0.0.1:8000
+
+# sgx.enclave_size = 8G
+sgx.enclave_size = 2G
+# sgx.enclave_size = 1G
+# sgx.enclave_size = 128M
+
+sgx.thread_num = 16
+
+sgx.debug = 1
+
+# sgx.debug = 1
+# sgx.enable_avx3 = 1
+# sgx.enable_mpx = 1
+# sgx.support_exinfo = 1        # CPU needs to support it

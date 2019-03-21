@@ -1,0 +1,16 @@
+/manifest
+
+# executables
+/channel
+/execing-process
+/goroutine
+/goroutines
+/goroutines-list
+/goroutines-stress
+/helloworld
+/many-goroutines
+/recursion
+/signal
+/sleep
+/sleep-go
+/timers
