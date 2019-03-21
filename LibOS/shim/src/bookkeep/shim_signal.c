@@ -250,19 +250,38 @@ static inline void sigreturn_jmp_emulate(PAL_CONTEXT * context)
     }
 }
 
+static void print_regs(PAL_CONTEXT * ctx)
+{
+    MASTER_LOCK();
+    debug("rax: 0x%08lx rcx: 0x%08lx rdx: 0x%08lx rbx: 0x%08lx\n",
+          ctx->rax, ctx->rcx, ctx->rdx, ctx->rbx);
+    debug("rsp: 0x%08lx rbp: 0x%08lx rsi: 0x%08lx rdi: 0x%08lx\n",
+          ctx->rsp, ctx->rbp, ctx->rsi, ctx->rdi);
+    debug("r8 : 0x%08lx r9 : 0x%08lx r10: 0x%08lx r11: 0x%08lx\n",
+          ctx->r8, ctx->r9, ctx->r10, ctx->r11);
+    debug("r12: 0x%08lx r13: 0x%08lx r14: 0x%08lx r15: 0x%08lx\n",
+          ctx->r12, ctx->r13, ctx->r14, ctx->r15);
+    debug("rflags: 0x%08lx rip: 0x%08lx\n",
+          ctx->efl, ctx->rip);
+    debug("csgsfs: 0x%08lx err: 0x%08lx trapno %ld odlmask 0x%08lx cr2: 0x%08lx\n",
+          ctx->csgsfs, ctx->err, ctx->trapno, ctx->oldmask, ctx->cr2);
+    MASTER_UNLOCK();
+}
+
 static inline void internal_fault(const char* errstr,
                                   PAL_NUM addr, PAL_CONTEXT * context)
 {
     IDTYPE tid = get_cur_tid();
     if (context_is_internal(context))
-        SYS_PRINTF("%s at 0x%08lx (IP = +0x%lx, VMID = %u, TID = %u)\n", errstr,
-                   addr, (void *) context->IP - (void *) &__load_address,
-                   cur_process.vmid, is_internal_tid(tid) ? 0 : tid);
+        debug("%s at 0x%08lx (IP = +0x%lx, VMID = %u, TID = %u)\n", errstr,
+              addr, (void *) context->IP - (void *) &__load_address,
+              cur_process.vmid, is_internal_tid(tid) ? 0 : tid);
     else
-        SYS_PRINTF("%s at 0x%08lx (IP = 0x%08lx, VMID = %u, TID = %u)\n", errstr,
-                   addr, context ? context->IP : 0,
-                   cur_process.vmid, is_internal_tid(tid) ? 0 : tid);
+        debug("%s at 0x%08lx (IP = 0x%08lx, VMID = %u, TID = %u)\n", errstr,
+              addr, context ? context->IP : 0,
+              cur_process.vmid, is_internal_tid(tid) ? 0 : tid);
 
+    print_regs(context);
     PAUSE();
 }
 
@@ -304,6 +323,10 @@ static void memfault_upcall (PAL_PTR event, PAL_NUM arg, PAL_CONTEXT * context)
 
     if (context)
         debug("memory fault at 0x%08lx (IP = 0x%08lx)\n", arg, context->IP);
+
+    print_regs(context);
+    debug("inst: 0x%08lx\n", context->IP);
+    debug_hex((unsigned long*)context->IP, 32);
 
     struct shim_vma_val vma;
     int signo = SIGSEGV;
@@ -559,6 +582,7 @@ static void illegal_upcall (PAL_PTR event, PAL_NUM arg, PAL_CONTEXT * context)
              *       in rcx. See the syscall_wrapper in syscallas.S
              * TODO: check SIGILL and ILL_ILLOPN
              */
+            debug("sigill (rip = %p %p)\n", rip, rip + 2);
             context->rcx = (long)rip + 2;
             context->r11 = context->efl;
             context->rip = (long)&syscall_wrapper;
