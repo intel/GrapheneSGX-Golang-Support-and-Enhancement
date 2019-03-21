@@ -270,10 +270,10 @@ int add_pages_to_enclave(sgx_arch_secs_t * secs,
     }
 
     if (size == pagesize)
-        SGX_DBG(DBG_I, "adding page  to enclave: %p [%s:%s] (%s)%s\n",
+        SGX_DBG(DBG_I, "adding page  to enclave: %16p [%s:%s] (%s)%s\n",
                 addr, t, p, comment, m);
     else
-        SGX_DBG(DBG_I, "adding pages to enclave: %p-%p [%s:%s] (%s)%s\n",
+        SGX_DBG(DBG_I, "adding pages to enclave: %16p-%16p [%s:%s] (%s)%s\n",
                 addr, addr + size, t, p, comment, m);
 
 
