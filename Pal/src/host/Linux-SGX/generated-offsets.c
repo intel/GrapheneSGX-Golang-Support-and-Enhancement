@@ -1,5 +1,6 @@
 #include <stddef.h>
 
+#include <pal.h>
 #include "pal_error.h"
 #include "sgx_arch.h"
 #include "sgx_tls.h"
@@ -132,5 +133,9 @@ void dummy(void)
 
     /* pal_error.h */
     DEFINE(PAL_ERROR_INTERRUPTED, PAL_ERROR_INTERRUPTED);
-}
 
+    /* fp regs */
+    OFFSET_T(XSAVE_HEADER_OFFSET, PAL_XREGS_STATE, header);
+    DEFINE(PAL_XSTATE_ALIGN, PAL_XSTATE_ALIGN);
+    DEFINE(PAL_FP_XSTATE_MAGIC2_SIZE, PAL_FP_XSTATE_MAGIC2_SIZE);
+}
