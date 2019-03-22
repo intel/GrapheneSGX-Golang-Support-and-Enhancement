@@ -5,6 +5,17 @@
 
 #ifndef __ASSEMBLER__
 
+/* work around to compile glibc */
+#ifndef _SHIM_ATOMIC_H_
+struct atomic_int {
+    volatile int64_t counter;
+}
+#ifdef __GNUC__
+__attribute__((aligned(sizeof(uint64_t))))
+#endif
+;
+#endif
+
 #define SHIM_TLS_CANARY 0xdeadbeef
 
 struct lock_record {
@@ -42,14 +53,14 @@ struct shim_context {
     struct shim_regs *      regs;
     struct shim_context *   next;
     uint64_t                enter_time;
-    uint64_t                preempt;
+    struct atomic_int       preempt;
 };
 
 #ifdef IN_SHIM
 
 #include <shim_defs.h>
 
-#define SIGNAL_DELAYED       (0x80000000UL)
+#define SIGNAL_DELAYED       (0x40000000L)
 
 #endif /* IN_SHIM */
 

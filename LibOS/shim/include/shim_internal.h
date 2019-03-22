@@ -221,16 +221,21 @@ void __sigreturn(mcontext_t * user_uc);
 
 void check_stack_hook (void);
 
-static inline uint64_t get_cur_preempt (void) {
+static inline int64_t get_cur_preempt (void) {
     shim_tcb_t* tcb = shim_get_tls();
     assert(tcb);
-    return tcb->context.preempt;
+    return atomic_read(&tcb->context.preempt);
 }
 
 #define BEGIN_SHIM(name, args ...)                          \
     SHIM_ARG_TYPE __shim_##name(args) {                     \
         SHIM_ARG_TYPE ret = 0;                              \
-        uint64_t preempt = get_cur_preempt();               \
+        int64_t preempt = get_cur_preempt();                \
+        if (preempt != 0) {                                 \
+            debug("preempt 0x%lx\n", preempt);              \
+        }                                                   \
+        assert((preempt & SIGNAL_DELAYED) == 0);            \
+        assert((preempt & ~SIGNAL_DELAYED) == 0);           \
         /* handle_signal(true); */                          \
         /* check_stack_hook(); */                           \
         BEGIN_SYSCALL_PROFILE();
@@ -238,8 +243,11 @@ static inline uint64_t get_cur_preempt (void) {
 #define END_SHIM(name)                                      \
         END_SYSCALL_PROFILE(name);                          \
         /* handle_signal(false); */                         \
-        assert(preempt == get_cur_preempt());               \
+        /* handle_sysret_signal() handles SIGNAL_DELAYED */ \
+        assert(preempt ==                                   \
+               (get_cur_preempt() & ~SIGNAL_DELAYED));      \
         handle_sysret_signal();                             \
+        assert(preempt == get_cur_preempt());               \
         return ret;                                         \
     }
 
@@ -489,13 +497,14 @@ static inline PAL_HANDLE thread_create (void * func, void * arg)
     return DkThreadCreate(func, arg);
 }
 
-static inline void __disable_preempt (shim_tcb_t * tcb)
+static inline int64_t __disable_preempt (shim_tcb_t * tcb)
 {
     //tcb->context.syscall_nr += SYSCALL_NR_PREEMPT_INC;
     /* Assert if this counter overflows */
-    assert((tcb->context.preempt & ~SIGNAL_DELAYED) != ~SIGNAL_DELAYED);
-    tcb->context.preempt++;
-    //debug("disable preempt: %ld\n", tcb->context.preempt & ~SIGNAL_DELAYED);
+    int64_t preempt = atomic_inc_return(&tcb->context.preempt);
+    assert((preempt & ~SIGNAL_DELAYED) != ~SIGNAL_DELAYED);
+    //debug("disable preempt: %ld\n", preempt & ~SIGNAL_DELAYED);
+    return preempt;
 }
 
 static inline void disable_preempt (shim_tcb_t * tcb)
@@ -510,9 +519,9 @@ static inline void __enable_preempt (shim_tcb_t * tcb)
 {
     //tcb->context.syscall_nr -= SYSCALL_NR_PREEMPT_INC;
     /* Assert if this counter underflows */
-    assert(tcb->context.preempt > 0);
-    tcb->context.preempt--;
-    //debug("enable preempt: %ld\n", tcb->context.preempt & ~SIGNAL_DELAYED);
+    int64_t preempt = atomic_add_return(-1, &tcb->context.preempt);
+    assert(preempt >= 0);
+    //debug("enable preempt: %ld\n", preempt & ~SIGNAL_DELAYED);
 }
 
 int __handle_signal (shim_tcb_t * tcb, int sig,
@@ -523,13 +532,43 @@ static inline void enable_preempt (shim_tcb_t * tcb)
     if (!tcb && !(tcb = shim_get_tls()))
         return;
 
-    if (!(tcb->context.preempt & ~SIGNAL_DELAYED))
+    int64_t preempt = atomic_read(&tcb->context.preempt);
+    if (!(preempt & ~SIGNAL_DELAYED)) {
+        assert((preempt & SIGNAL_DELAYED) == 0);
         return;
+    }
 
-    if ((tcb->context.preempt & ~SIGNAL_DELAYED) == 1)
-        __handle_signal(tcb, 0, NULL, NULL);
+    if ((preempt & ~SIGNAL_DELAYED) == 1) {
+        do {
+            __handle_signal(tcb, 0, NULL, NULL);
+            /* if SIGNAL_DELAYED is set at the same time, retry. */
+        } while (atomic_cmpxchg(&tcb->context.preempt, 1, 0) != 1);
+        return;
+    }
 
     __enable_preempt(tcb);
+}
+
+static inline void __preempt_set_delayed(shim_tcb_t * tcb)
+{
+    struct atomic_int * preempt = &tcb->context.preempt;
+    int64_t old;
+    int64_t new;
+    do {
+        old = atomic_read(preempt);
+        new = old | SIGNAL_DELAYED;
+    } while (atomic_cmpxchg(preempt, old, new) != old);
+}
+
+static inline void __preempt_clear_delayed(shim_tcb_t * tcb)
+{
+    struct atomic_int * preempt = &tcb->context.preempt;
+    int64_t old;
+    int64_t new;
+    do {
+        old = atomic_read(preempt);
+        new = old & ~SIGNAL_DELAYED;
+    } while (atomic_cmpxchg(preempt, old, new) != old);
 }
 
 #define DEBUG_LOCK 0
