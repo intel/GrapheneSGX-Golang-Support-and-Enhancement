@@ -89,7 +89,31 @@ out:
 int shim_do_sigreturn (int __unused)
 {
     __UNUSED(__unused);
-    /* do nothing */
+    shim_tcb_t *tcb = shim_get_tls();
+    ucontext_t * user_uc = (ucontext_t*)tcb->context.regs->rsp;
+
+    debug("sigreturn thread %d regs: %p sp: %08lx "
+          "user_uc: %p gregs.rsp: %08lx gregs.rip: %08lx\n",
+          get_cur_thread()->tid, tcb->context.regs, tcb->context.regs->rsp,
+          user_uc,
+          user_uc->uc_mcontext.gregs[REG_RSP],
+          user_uc->uc_mcontext.gregs[REG_RIP]);
+
+    clear_bit(SHIM_FLAG_SIGPENDING, &tcb->flags);
+    while (!handle_next_signal(user_uc)) {
+        struct _libc_fpstate * user_fpstate = user_uc->uc_mcontext.fpregs;
+        long lmask = -1;
+        long hmask = -1;
+        __asm__ volatile("xrstor64 (%0)"
+                         :: "r"(user_fpstate), "m"(*user_fpstate),
+                          "a"(lmask), "d"(hmask)
+                         : "memory");
+        /* no more signals pending. return back */
+        __sigreturn(&user_uc->uc_mcontext);
+
+        /* if signal is delivered after clearing bit above, try again */
+        clear_bit(SHIM_FLAG_SIGPENDING, &tcb->flags);
+    }
     return 0;
 }
 
@@ -551,7 +575,7 @@ int shim_do_kill (pid_t pid, int sig)
             memset(&info, 0, sizeof(siginfo_t));
             info.si_signo = sig;
             info.si_pid   = cur->tid;
-            deliver_signal(&info, NULL);
+            deliver_signal(NULL, &info, NULL);
         }
     }
 
@@ -605,7 +629,7 @@ int shim_do_tkill (pid_t tid, int sig)
             memset(&info, 0, sizeof(siginfo_t));
             info.si_signo = sig;
             info.si_pid   = cur->tid;
-            deliver_signal(&info, NULL);
+            deliver_signal(NULL, &info, NULL);
         }
         return 0;
     }
@@ -631,7 +655,7 @@ int shim_do_tgkill (pid_t tgid, pid_t tid, int sig)
             memset(&info, 0, sizeof(siginfo_t));
             info.si_signo = sig;
             info.si_pid   = cur->tid;
-            deliver_signal(&info, NULL);
+            deliver_signal(NULL, &info, NULL);
         }
         return 0;
     }

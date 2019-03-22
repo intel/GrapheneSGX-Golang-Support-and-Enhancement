@@ -20,7 +20,6 @@
  * This file contains codes for checkpoint / migration scheme of library OS.
  */
 
-#include "asm-offsets.h"
 #include <shim_internal.h>
 #include <shim_utils.h>
 #include <shim_thread.h>
@@ -38,6 +37,8 @@
 #include <stdarg.h>
 #include <asm/fcntl.h>
 #include <asm/mman.h>
+
+#include "asm-offsets.h"
 
 DEFINE_PROFILE_CATEGORY(migrate, );
 
@@ -1486,6 +1487,11 @@ void restore_context (struct shim_context * context)
 
     /* Ready to resume execution, re-enable preemption. */
     shim_tcb_t * tcb = shim_get_tls();
+    struct shim_context * c = &tcb->context;
+    debug("restore tcb: %p tcb->self: %p tcb->tp: %p tcb->tp->tcb.shim_tcb: %p\n",
+          tcb, tcb->self, tcb->tp, &tcb->tp->tcb->shim_tcb);
+    debug("context %p c: %p SP = %08lx, IP = %08lx\n",
+          context, c, regs.rsp, regs.rip);
     __enable_preempt(tcb);
 
     memset(context, 0, sizeof(struct shim_context));
