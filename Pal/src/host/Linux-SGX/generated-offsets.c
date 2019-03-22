@@ -67,7 +67,7 @@ void dummy(void)
            sizeof(sgx_context_t) % PAL_XSTATE_ALIGN);
 
     /* struct enclave_tls */
-    OFFSET(SGX_SELF, enclave_tls, self);
+    OFFSET(SGX_SELF, enclave_tls, common.self);
     OFFSET(SGX_ENCLAVE_SIZE, enclave_tls, enclave_size);
     OFFSET(SGX_TCS_OFFSET, enclave_tls, tcs_offset);
     OFFSET(SGX_INITIAL_STACK_OFFSET, enclave_tls, initial_stack_offset);

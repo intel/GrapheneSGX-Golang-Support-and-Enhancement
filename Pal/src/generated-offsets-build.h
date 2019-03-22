@@ -6,5 +6,6 @@
 
 #define OFFSET(name, str, member)   DEFINE(name, offsetof(struct str, member))
 #define OFFSET_T(name, str_t, member) DEFINE(name, offsetof(str_t, member))
+#define OFFSET_U(name, str, member) DEFINE(name, offsetof(union str, member))
 
 #endif /* GENERATED_OFFSETS_BUILD_H */
