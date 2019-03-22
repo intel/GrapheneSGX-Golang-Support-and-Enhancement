@@ -466,6 +466,8 @@ int initialize_enclave (struct pal_enclave * enclave)
 
             for (uint32_t t = 0 ; t < enclave->thread_num ; t++) {
                 struct enclave_tls * gs = data + pagesize * t;
+                gs->self = (struct enclave_tls *)(
+                    tls_area->addr + pagesize * t + enclave_secs.baseaddr);
                 gs->enclave_size = enclave->size;
                 gs->tcs_offset = tcs_area->addr + pagesize * t;
                 gs->initial_stack_offset =
