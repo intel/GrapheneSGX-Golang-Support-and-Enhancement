@@ -2,6 +2,7 @@
 
 #include <stddef.h>
 
+#include <shim_defs.h>
 #include <shim_internal.h>
 #include <shim_tls.h>
 #include <shim_thread.h>
@@ -18,7 +19,11 @@ void dummy(void)
     OFFSET_T(PAL_CONTEXT_CSGSFS, PAL_CONTEXT, csgsfs);
 
     /* shim_tcb_t */
+#ifdef SHIM_TCB_USE_GS
+    OFFSET_T(SHIM_TCB_OFFSET, PAL_TCB, libos_tcb);
+#else
     OFFSET_T(SHIM_TCB_OFFSET, __libc_tcb_t, shim_tcb);
+#endif
     OFFSET_T(TCB_SELF, shim_tcb_t, self);
     OFFSET_T(TCB_TP, shim_tcb_t, tp);
     OFFSET_T(TCB_REGS, shim_tcb_t, context.regs);

@@ -114,7 +114,7 @@ static void fixup_child_context(struct shim_regs * regs)
  */
 #define PTHREAD_PADDING 2048
 
-int clone_implementation_wrapper(struct clone_args * arg)
+static int clone_implementation_wrapper(struct clone_args * arg)
 {
     //The child thread created by PAL is now running on the
     //PAL allocated stack. We need to switch the stack to use
@@ -134,13 +134,13 @@ int clone_implementation_wrapper(struct clone_args * arg)
         my_thread->tcb = __alloca(sizeof(__libc_tcb_t) + PTHREAD_PADDING);
     }
     allocate_tls(my_thread->tcb, my_thread->user_tcb, my_thread);
-    shim_tcb_t * tcb = &my_thread->tcb->shim_tcb;
+    shim_tcb_t * tcb = my_thread->shim_tcb;
     __disable_preempt(tcb); // Temporarily disable preemption, because the preemption
                             // will be re-enabled when the thread starts.
-    debug_setbuf(tcb, true);
+    debug_setbuf(tcb, false);
     debug("set tcb to %p (stack allocated? %d)\n", my_thread->tcb, stack_allocated);
 
-    struct shim_regs regs = *arg->parent->tcb->shim_tcb.context.regs;
+    struct shim_regs regs = *arg->parent->shim_tcb->context.regs;
     if (my_thread->set_child_tid) {
         *(my_thread->set_child_tid) = my_thread->tid;
         my_thread->set_child_tid = NULL;

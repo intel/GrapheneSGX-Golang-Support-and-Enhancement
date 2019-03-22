@@ -56,13 +56,12 @@ allocate_signal_log (struct shim_thread * thread, int sig)
 
     atomic_inc(&thread->has_signal);
 
-    if (thread->tcb)
-        set_bit(SHIM_FLAG_SIGPENDING, &thread->tcb->shim_tcb.flags);
+    shim_tcb_t * shim_tcb = thread->shim_tcb;
+    set_bit(SHIM_FLAG_SIGPENDING, &shim_tcb->flags);
 
     debug("signal set_bit thread: %p tcb: %p &tcb->flags: %p tcb->flags 0x%lx "
           "tcb->tid %d counter = %ld\n",
-          thread, thread->tcb, &(((shim_tcb_t*)thread->tcb)->flags),
-          ((shim_tcb_t*)thread->tcb)->flags, ((shim_tcb_t*)thread->tcb)->tid,
+          thread, thread->tcb, &shim_tcb->flags, shim_tcb->flags, shim_tcb->tid,
           thread->has_signal.counter);
 
     return &log->logs[old_tail];
@@ -832,7 +831,7 @@ __handle_one_signal (shim_tcb_t * tcb, int sig, struct shim_signal * signal,
         debug("waking up for signal "
               "thread: %p tcb: %p, tcb->flags: %p 0x%lx tid: %d\n",
               thread, tcb, &tcb->flags, tcb->flags, tcb->tid);
-        set_bit(SHIM_FLAG_SIGPENDING, &(((shim_tcb_t*)thread->tcb)->flags));
+        set_bit(SHIM_FLAG_SIGPENDING, &thread->shim_tcb->flags);
         return;
     }
 

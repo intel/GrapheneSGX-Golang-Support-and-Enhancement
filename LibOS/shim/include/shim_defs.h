@@ -38,4 +38,7 @@
 #define REQUIRED_ELF_AUXV           8   /* number of LibOS-supported vectors */
 #define REQUIRED_ELF_AUXV_SPACE     16  /* extra memory space (in bytes) */
 
+#define SHIM_TCB_USE_GS             1
+//#undef SHIM_TCB_USE_GS
+
 #endif /* _SHIM_DEFS_H_ */

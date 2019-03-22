@@ -20,6 +20,7 @@
  * This file contains the entry point of system call table in library OS.
  */
 
+#include <shim_defs.h>
 #include <shim_tls.h>
 #include <shim_unistd_defs.h>
 
@@ -52,12 +53,18 @@
         .type __syscallas_signal_allowed_3_end, @object
         .type __syscallas_need_emulate_jmp, @object
 
+#ifdef SHIM_TCB_USE_GS
+# define TCB_SEGMENT_REG	%gs
+#else
+# define TCB_SEGMENT_REG	%fs
+#endif
+
 .macro CLEAR_SAVED_AREA_IN_SHIM_TLS
-        movq $0, %fs:(SHIM_TCB_OFFSET + TCB_REGS)
+        movq $0, TCB_SEGMENT_REG:(SHIM_TCB_OFFSET + TCB_REGS)
 .endm
 
 .macro CHECK_SIGNAL_PENDING_BIT
-        lock btrq $SHIM_FLAG_SIGPENDING, %fs:(SHIM_TCB_OFFSET + TCB_FLAGS)
+        lock btrq $SHIM_FLAG_SIGPENDING, TCB_SEGMENT_REG:(SHIM_TCB_OFFSET + TCB_FLAGS)
 .endm
 
 syscalldb:
@@ -106,7 +113,7 @@ __syscallas_signal_allowed_0_begin:
         je isundef
 __syscallas_signal_allowed_0_end:
 
-        movq %rbp, %fs:(SHIM_TCB_OFFSET + TCB_REGS)
+        movq %rbp, TCB_SEGMENT_REG:(SHIM_TCB_OFFSET + TCB_REGS)
 
         /* Translating x86_64 kernel calling convention to user-space
          * calling convention */
