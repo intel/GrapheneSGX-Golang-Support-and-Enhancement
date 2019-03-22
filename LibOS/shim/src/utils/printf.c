@@ -126,14 +126,18 @@ void debug_setprefix (shim_tcb_t * tcb)
 
     struct debug_buf * buf = tcb->debug_buf;
     buf->start = buf->end = 0;
+    PAL_TCB * pal_tcb = pal_get_tcb();
 
     if (tcb->tid && !is_internal_tid(tcb->tid))
-        fprintfmt(debug_fputch, NULL, buf, TID_PREFIX, tcb->tid);
+        fprintfmt(debug_fputch, NULL, buf, TID_PREFIX,
+                  tcb->tid, pal_tcb->pal_tid, pal_tcb->host_tid);
     else if (cur_process.vmid)
         fprintfmt(debug_fputch, NULL, buf, VMID_PREFIX,
-                  cur_process.vmid & 0xFFFF);
+                  cur_process.vmid & 0xFFFF,
+                  pal_tcb->pal_tid, pal_tcb->host_tid);
     else
-        fprintfmt(debug_fputch, NULL, buf, NOID_PREFIX);
+        fprintfmt(debug_fputch, NULL, buf, NOID_PREFIX,
+                  pal_tcb->pal_tid, pal_tcb->host_tid);
 
     buf->start = buf->end;
 }

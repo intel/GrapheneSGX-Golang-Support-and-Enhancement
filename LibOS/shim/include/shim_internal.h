@@ -88,9 +88,9 @@ void __debug_hex(const char * file, const int line, const char * func,
     __debug_hex(__FILE__, __LINE__, __func__, (addr), (count))
 
 
-#define VMID_PREFIX     "[P%05u] "
-#define TID_PREFIX      "[%-6u] "
-#define NOID_PREFIX     "[      ] "
+#define VMID_PREFIX     "[P%05u] [%ld:%ld] "
+#define TID_PREFIX      "[%-6u] [%ld:%ld] "
+#define NOID_PREFIX     "[      ] [%ld:%ld] "
 #define debug(fmt, ...)                                                     \
     do {                                                                    \
         if (debug_handle)                                                   \
