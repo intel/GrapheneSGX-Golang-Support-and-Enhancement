@@ -31,6 +31,12 @@ include $(PALDIR)/Makefile.Test
 
 .PHONY: all
 all: pal_loader $(target) $(if $(level),,build-subdirs) | $(call expand_target,$(exec_target))
+ifeq ($(SGX), 1)
+all: $(addsuffix .sig,$(exec_target))
+endif
+ifeq ($(SGX_RUN), 1)
+all: $(addsuffix .token,$(exec_target))
+endif
 
 ifeq ($(DEBUG),1)
 CC += -g
