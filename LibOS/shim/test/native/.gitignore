@@ -38,6 +38,7 @@ msg_send
 msg_send.libos
 multiproc
 multisleep
+pause
 pid_alloc
 pid_kill
 pie
