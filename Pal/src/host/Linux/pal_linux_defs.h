@@ -4,7 +4,7 @@
 #define USER_ADDRESS_LOWEST     0x10000
 
 #define THREAD_STACK_SIZE       (PRESET_PAGESIZE * 2)
-#define ALT_STACK_SIZE          PRESET_PAGESIZE
+#define ALT_STACK_SIZE          (PRESET_PAGESIZE * 4)
 
 /* internal wrap native pipe inside pipe streams */
 #define USE_PIPE_SYSCALL        0
