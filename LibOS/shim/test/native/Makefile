@@ -11,6 +11,7 @@ STATIC_EXECUTABLES_SOURCES = \
 	fork.c \
 	fork_bomb.c \
 	fork_exec.c \
+	sigaltstack.c \
 	vfork.c \
 	vfork_exec.c
 STATIC_EXECUTABLES = $(patsubst %.c, static-%, $(STATIC_EXECUTABLES_SOURCES))

@@ -198,6 +198,16 @@ int shim_do_sigaltstack (const stack_t * ss, stack_t * oss)
         *oss = *cur_ss;
 
     void * sp = (void *)shim_get_tls()->context.regs->rsp;
+#ifdef SHIM_SYSCALL_STACK
+    shim_tcb_t * tcb = shim_get_tls();
+    struct shim_regs * regs = tcb->context.regs;
+    if ((void *)regs->rip == &syscall_wrapper_after_syscalldb) {
+        assert((unsigned long)tcb->tp->syscall_stack < regs->rsp);
+        assert(regs->rsp <
+               (unsigned long)tcb->tp->syscall_stack + SHIM_THREAD_SYSCALL_STACK_SIZE);
+        sp = (void *)tcb->context.regs->r11;
+    }
+#endif
     /* check if thread is currently executing on an active altstack */
     if (!(cur_ss->ss_flags & SS_DISABLE) &&
         sp &&

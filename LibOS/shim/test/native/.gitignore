@@ -50,6 +50,7 @@ rename
 sandbox_create.libos
 script
 sem
+sigaltstack
 sleep
 socketpair
 sqrt.m
@@ -62,6 +63,7 @@ static-exec_fork
 static-fork
 static-fork_bomb
 static-fork_exec
+static-sigaltstack
 static-vfork
 static-vfork_exec
 sync.pthread
