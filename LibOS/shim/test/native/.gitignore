@@ -51,6 +51,7 @@ sandbox_create.libos
 script
 sem
 sigaltstack
+signostack
 sleep
 socketpair
 sqrt.m

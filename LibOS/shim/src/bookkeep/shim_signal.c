@@ -717,6 +717,24 @@ static unsigned int fpstate_size_get(const struct _libc_fpstate * fpstate)
 static void direct_call_if_sighandler_kill(
     int sig, siginfo_t * info, void (*handler) (int, siginfo_t *, void *));
 
+static void * __get_signal_stack(
+    struct shim_thread * thread, void * current_stack)
+{
+    const stack_t * ss = &thread->signal_altstack;
+    if (ss->ss_flags & SS_DISABLE)
+        return current_stack;
+    if (ss->ss_sp < current_stack &&
+        current_stack <= ss->ss_sp + ss->ss_size)
+        return current_stack;
+
+    return ss->ss_sp + ss->ss_size;
+}
+
+static void * aligndown_sigframe(void * sp)
+{
+    return ALIGN_DOWN_PTR(sp, 16UL) - 8;
+}
+
 static void __setup_sig_frame(
     shim_tcb_t * tcb, int sig, struct shim_signal * signal,
     PAL_PTR eventp, PAL_CONTEXT * context,
@@ -736,22 +754,34 @@ static void __setup_sig_frame(
     struct _libc_fpstate * fpstate = &xregs_state->fpstate;
     unsigned int fpstate_size = fpstate_size_get(fpstate);
 
+#if 0
     //unsigned long sp = uc->uc_mcontext.gregs[REG_RSP];
-    unsigned long sp = context->rsp;
+    void * sp = context->rsp;
     sp -= RED_ZONE_SIZE;  /* redzone */
-    fpregset_t user_fp = (fpregset_t)ALIGN_DOWN_PTR(sp - fpstate_size, 64UL);
-    struct sigframe * user_sigframe = (struct sigframe *)ALIGN_DOWN_PTR(user_fp - sizeof(struct sigframe), 16UL) - 8;
+#else
+    void * sp = __get_signal_stack(tcb->tp, (void *)context->rsp);
+    if (sp == (void *)context->rsp)
+        sp -= RED_ZONE_SIZE;  /* redzone */
+#endif
+    fpregset_t user_fp = ALIGN_DOWN_PTR(sp - fpstate_size, 64UL);
+    struct sigframe * user_sigframe =
+        aligndown_sigframe((void*)user_fp - sizeof(struct sigframe));
+    assert(&user_sigframe->uc == ALIGN_UP_PTR(&user_sigframe->uc, 16UL));
     user_sigframe->restorer = restorer;
     //memcpy(&user_sigframe->uc, uc, sizeof(*uc));    //XXX
     user_sigframe->uc.uc_flags = UC_SIGCONTEXT_SS | UC_STRICT_RESTORE_SS;
     user_sigframe->uc.uc_link = NULL;
     memcpy(&user_sigframe->uc.uc_mcontext.gregs, context,
            sizeof(user_sigframe->uc.uc_mcontext.gregs));
-    /* For now sigaltstack isn't supported */
     stack_t * stack = &user_sigframe->uc.uc_stack;
+#if 0
+    /* For now sigaltstack isn't supported */
     stack->ss_sp = 0;
     stack->ss_flags = SS_DISABLE;
     stack->ss_size = 0;
+#else
+    *stack = tcb->tp->signal_altstack;
+#endif
     memcpy(&user_sigframe->info, &signal->info, sizeof(signal->info));
     if (fpstate_size > 0) {
         user_sigframe->uc.uc_flags |= UC_FP_XSTATE;
@@ -1119,10 +1149,36 @@ bool deliver_signal_on_sysret(void * stack, uint64_t syscall_ret)
     void (*restorer) (void) = deliver.restorer;
     direct_call_if_sighandler_kill(sig, &signal->info, handler);
 
+#if 0
     struct shim_regs * regs = stack;
     stack += sizeof(*regs);
     struct sigframe * user_sigframe = stack;
-    assert(user_sigframe == ALIGN_UP_PTR(user_sigframe, 16UL));
+#else
+    /* on syscall entry, red zone is already allocated. */
+    void * sp = __get_signal_stack(tcb->tp, stack);
+    bool switch_stack = (sp != stack);
+    struct shim_regs * regs;
+    struct sigframe * user_sigframe;
+    if (switch_stack) {
+        regs = tcb->context.regs;
+
+        /* See .Lsignal_pending @ syscallas.S */
+        sp -= sizeof(struct sigframe) + FP_XSTATE_MAGIC2_SIZE + 64;
+        sp -= fpu_xstate_size;
+        sp = aligndown_sigframe(sp);
+        stack = sp;
+        user_sigframe = stack;
+    } else {
+        regs = stack;
+        /* move up context.regs on stack*/
+        memcpy(regs, tcb->context.regs, sizeof(*regs));
+        tcb->context.regs = regs;
+
+        stack += sizeof(*regs);
+        user_sigframe = stack;
+    }
+#endif
+    assert(&user_sigframe->uc == ALIGN_UP_PTR(&user_sigframe->uc, 16UL));
     stack += sizeof(*user_sigframe);
     stack = ALIGN_UP_PTR(stack, 64UL);
     struct _libc_fpstate * user_fpstate = stack;
@@ -1130,9 +1186,11 @@ bool deliver_signal_on_sysret(void * stack, uint64_t syscall_ret)
     debug("regs: %p sigframe: %p uc: %p fpstate: %p\n",
           regs, user_sigframe, &user_sigframe->uc, user_fpstate);
 
+#if 0
     /* move up context.regs on stack*/
     memcpy(regs, tcb->context.regs, sizeof(*regs));
     tcb->context.regs = regs;
+#endif
 
     /* setup sigframe */
     user_sigframe->restorer = restorer;
@@ -1140,9 +1198,13 @@ bool deliver_signal_on_sysret(void * stack, uint64_t syscall_ret)
     ucontext_t * user_uc = &user_sigframe->uc;
     user_uc->uc_flags = UC_FP_XSTATE;
     user_uc->uc_link = NULL;
+#if 0
     user_uc->uc_stack.ss_sp = 0;
     user_uc->uc_stack.ss_size = 0;
-    user_uc->uc_stack.ss_flags = 0;
+    user_uc->uc_stack.ss_flags = SS_DISABLE;
+#else
+    user_uc->uc_stack = tcb->tp->signal_altstack;
+#endif
 
     gregset_t * gregs = &user_uc->uc_mcontext.gregs;
     (*gregs)[REG_R8] = regs->r8;
@@ -1199,15 +1261,47 @@ bool deliver_signal_on_sysret(void * stack, uint64_t syscall_ret)
     // XXX sigaction();
     __sigemptyset(&user_uc->uc_sigmask);
 
+    free(signal);
+
+#if 0
     // setup to return to signal handler
     // tcb->context.sp = (void *)user_sigframe;
     // tcb->context.ret_ip = (void *)handler;
-    regs->rip = (long)handler;
-    regs->rdi = (long)sig;
+    regs->rip = (unsigned long)handler;
+    regs->rdi = (unsigned long)sig;
     regs->rsi = (unsigned long)&user_sigframe->info;
     regs->rdx = (unsigned long)&user_sigframe->uc;
+#else
+    if (switch_stack) {
+        /* gave up preserving registers for now.
+         * Directly switch stack and jump to signal handler.
+         * This behavior is different from Linux kernel.
+         * TODO: switch stack and return to let .Lret_signal @ syscallas.S
+         *       handle it to preserve registers to match linux kernel
+         *       behavior.
+         *       It doesn't matter for normal application in practice?
+         */
+        __asm__ volatile (
+            "movq %%rbx, %%rsp\n"
+            "jmpq *%%rcx\n"
+            ::
+             "D"((long)sig),
+             "S"((unsigned long)&user_sigframe->info),
+             "d"((unsigned long)&user_sigframe->uc),
+             "a"(0),
+             "c"((long)handler), "b"(user_sigframe));
+        /* NOTREACHED */
+    } else {
+        // setup to return to signal handler
+        // tcb->context.sp = (void *)user_sigframe;
+        // tcb->context.ret_ip = (void *)handler;
+        regs->rip = (unsigned long)handler;
+        regs->rdi = (unsigned long)sig;
+        regs->rsi = (unsigned long)&user_sigframe->info;
+        regs->rdx = (unsigned long)&user_sigframe->uc;
+    }
+#endif
 
-    free(signal);
     return true;
 }
 

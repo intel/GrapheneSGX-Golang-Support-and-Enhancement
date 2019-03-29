@@ -203,18 +203,21 @@ __syscallas_signal_allowed_1_end:
 
         movq %rsp, %r11
         movq %rdi, %rsp
+        subq $8, %rsp           # to align 16bytes for below callq
+                                # notice the below pushq beforew callq
         movq %rax, %rsi
         pushq %r11
         pushq %rsi # save %rax in case that signal is not delivered
         call *deliver_signal_on_sysret@GOTPCREL(%rip)
         popq %rsi
         popq %r11
+        addq $8, %rsp
         cmp $0, %rax
+        movq %rsi, %rax # %rsi conatins returning %rax saved above
         je .Lsignal_not_delivered
         jmp .Lret_signal
 
 .Lsignal_not_delivered:
-        movq %rsi, %rax # %rsi conatins returning %rax saved above
         movq %r11, %rsp
         jmp .Lret_nosignal
 
