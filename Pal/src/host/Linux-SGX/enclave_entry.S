@@ -430,7 +430,6 @@ enclave_entry:
 	movq SGX_GPR_RIP(%rbx), %rdi
 	movq %rdi, SGX_CONTEXT_RIP(%rsi)
 
-	movq %rsi, SGX_GPR_RSP(%rbx)
 	# Pass pointer to sgx_context_t to _DkExceptionHandler
 	movq %rsi, SGX_GPR_RSI(%rbx) ## 2nd argument for _DkExceptionHandler()
 
@@ -663,6 +662,7 @@ __morestack:
 	movq %rsp, %rsi	## %rsi = sgx_context_t * uc
 	movq %rsp, %rdx
 	addq $SGX_CONTEXT_SIZE, %rdx ## %rdx = PAL_XREGS_STATE * xregs_state
+	andq $~15, %rsp
 	callq _DkHandleExternalEvent
 	## NOTREACHED
 
@@ -762,7 +762,9 @@ __restore_sgx_context_retry:
 	## in signal stack.
 	subq $SGX_CONTEXT_R14, %rsp # revert popq
 	movq %rsp, %rdi
+	andq $~15, %rsp
 	callq _DkExceptionHandlerMore
+	## NOTREACHED
 
 	# void save_xregs(uint64_t xsave_area)
 	.global save_xregs
