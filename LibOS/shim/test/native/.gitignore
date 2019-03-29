@@ -54,6 +54,8 @@ socketpair
 sqrt.m
 start.pthread.m
 static
+static-alarm
+static-alarm_loop
 static-clone
 static-exec_fork
 static-fork

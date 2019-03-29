@@ -4,6 +4,8 @@ cxx_executables = $(patsubst %.cpp,%,$(wildcard *.cpp))
 manifests = $(patsubst %.template,%,$(wildcard *.manifest.template)) manifest
 
 STATIC_EXECUTABLES_SOURCES = \
+	alarm.c \
+	alarm_loop.c \
 	clone.c \
 	exec_fork.c \
 	fork.c \
