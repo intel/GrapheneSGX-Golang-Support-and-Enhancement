@@ -486,6 +486,11 @@ int check_last_thread (struct shim_thread * self)
             IDTYPE tid = tmp->tid;
             unlock(&thread_list_lock);
 
+#if 0
+            /* This word around doesn't work. we need distiguish exit() and
+             * exit_group(). We should enable this only while we are in
+             * exit_gorup().
+             */
             /*
              * BUG WORK AROUND:
              * In shim, there are race conditions between thread wakeup
@@ -493,6 +498,7 @@ int check_last_thread (struct shim_thread * self)
              * TODO: once the race condition is fixed, remove this.
              */
             do_kill_proc(self->tgid, self->tgid, SIGKILL, false);
+#endif
 
             return tid;
         }
