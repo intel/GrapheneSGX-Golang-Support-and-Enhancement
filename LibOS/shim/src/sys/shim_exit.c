@@ -179,6 +179,12 @@ noreturn static void exit_late (int error_code, void (*func)(int))
 
     populate_tls(&cur_thread->exit_tcb, false);
     debug_setbuf(shim_get_tls(), true);
+    /* After thread exiting and tls in PAL with SHIM_USE_GS enabled is freed,
+     * other thread can access thread and thread->tcb.
+     * so really switch shim_tls to the one in shim_thread.
+     */
+    copy_tcb(&cur_thread->exit_tcb.shim_tcb, shim_get_tls());
+    cur_thread->shim_tcb = &cur_thread->exit_tcb.shim_tcb;
 
     int ret;
     __asm__ volatile(

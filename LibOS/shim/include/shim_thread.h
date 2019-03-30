@@ -178,6 +178,7 @@ void put_thread (struct shim_thread * thread);
 void get_simple_thread (struct shim_simple_thread * thread);
 void put_simple_thread (struct shim_simple_thread * thread);
 
+void copy_tcb (shim_tcb_t * new_tcb, const shim_tcb_t * old_tcb);
 void allocate_tls (__libc_tcb_t * tcb_location, bool user, struct shim_thread * thread);
 void populate_tls (__libc_tcb_t * tcb_location, bool user);
 

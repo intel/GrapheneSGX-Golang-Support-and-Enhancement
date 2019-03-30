@@ -204,8 +204,7 @@ void init_tcb (shim_tcb_t * tcb)
     tcb->self = tcb;
 }
 
-#ifndef SHIM_TCB_USE_GS
-static void copy_tcb (shim_tcb_t * new_tcb, const shim_tcb_t * old_tcb)
+void copy_tcb (shim_tcb_t * new_tcb, const shim_tcb_t * old_tcb)
 {
     memset(new_tcb, 0, sizeof(shim_tcb_t));
     new_tcb->canary = SHIM_TLS_CANARY;
@@ -219,7 +218,6 @@ static void copy_tcb (shim_tcb_t * new_tcb, const shim_tcb_t * old_tcb)
     new_tcb->flags = new_tcb->flags;
     new_tcb->debug_buf = old_tcb->debug_buf;
 }
-#endif
 
 /* This function is used to allocate tls before interpreter start running */
 void allocate_tls (__libc_tcb_t * tcb, bool user, struct shim_thread * thread)
