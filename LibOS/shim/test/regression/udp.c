@@ -13,6 +13,7 @@
 #define BUFLEN 512
 #define NPACK 10
 
+in_port_t port = PORT;
 enum { SINGLE, PARALLEL } mode = PARALLEL;
 int do_fork = 0;
 
@@ -27,29 +28,57 @@ int server(void)
 
     if ((s=socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP))==-1) {
         fprintf(stderr, "socket() failed\n");
-        exit(1);
+        exit(EXIT_FAILURE);
+    }
+
+    if (mode == PARALLEL) {
+        int optval = 0;
+        if (setsockopt(s, SOL_IP, IP_BIND_ADDRESS_NO_PORT,
+                       &optval, sizeof(optval)) < 0) {
+            perror("setcokopt");
+            exit(EXIT_FAILURE);
+        }
+        port = 0;
     }
 
     memset((char *) &si_me, 0, sizeof(si_me));
     si_me.sin_family = AF_INET;
-    si_me.sin_port = htons(PORT);
+    si_me.sin_port = htons(port);
     si_me.sin_addr.s_addr = htonl(INADDR_ANY);
 
     if (bind(s, (struct sockaddr *) &si_me, sizeof(si_me))==-1) {
         fprintf(stderr, "bind() failed\n");
-        exit(1);
+        exit(EXIT_FAILURE);
+    }
+
+    if (mode == PARALLEL) {
+        socklen_t len = sizeof(si_me);
+        if (getsockname(s, (struct sockaddr *) &si_me, &len) < 0) {
+            perror("getsockname");
+            exit(EXIT_FAILURE);
+        }
+        port = ntohs(si_me.sin_port);
+        printf("server: port %d\n", port);
     }
 
     if (mode == PARALLEL) {
         close(pipefds[0]);
-        char byte = 0;
-        write(pipefds[1], &byte, 1);
+        write(pipefds[1], &port, sizeof(port));
     }
 
     if (do_fork) {
-        if (fork() > 0) {
+        pid_t pid = fork();
+        if (pid < 0) {
+            perror("fork");
+            exit(EXIT_FAILURE);
+        }
+
+        if (pid > 0) {
             close(s);
-            wait(NULL);
+            if (wait(NULL) < 0) {
+                perror("server: wait");
+                exit(EXIT_FAILURE);
+            }
             return 0;
         }
     }
@@ -58,16 +87,17 @@ int server(void)
         if (recvfrom(s, buf, BUFLEN, 0, (struct sockaddr *) &si_other,
                      &slen)==-1) {
             fprintf(stderr, "recvfrom() failed\n");
-            exit(1);
+            exit(EXIT_FAILURE);
         }
 
-        printf("Received packet from %s:%d\nData: %s\n",
+        printf("server: Received packet from %s:%d\nData: %s\n",
                inet_ntoa(si_other.sin_addr), ntohs(si_other.sin_port), buf);
     }
 
-    close(s);
+    if (close(s) < 0)
+        perror("server: close");
     if (do_fork)
-        exit(0);
+        exit(EXIT_SUCCESS);
     return 0;
 }
 
@@ -81,44 +111,53 @@ int client(void)
 
     if (mode == PARALLEL) {
         close(pipefds[1]);
-        char byte = 0;
-        read(pipefds[0], &byte, 1);
+        read(pipefds[0], &port, sizeof(port));
     }
+    printf("client: port %d\n", port);
 
     if ((s=socket(AF_INET,SOCK_DGRAM,IPPROTO_UDP))==-1) {
         fprintf(stderr, "socket() failed\n");
-        exit(1);
+        exit(EXIT_FAILURE);
     }
 
     if (do_fork) {
-        if (fork() > 0) {
+        pid_t pid = fork();
+        if (pid < 0) {
+            perror("client: fork");
+            exit(EXIT_FAILURE);
+        }
+
+        if (pid > 0) {
             close(s);
-            wait(NULL);
+            if (wait(NULL) < 0) {
+                perror("wait");
+                exit(EXIT_FAILURE);
+            }
             return 0;
         }
     }
 
     memset((char *) &si_other, 0, sizeof(si_other));
     si_other.sin_family = AF_INET;
-    si_other.sin_port = htons((PORT));
+    si_other.sin_port = htons(port);
     if (inet_aton(SRV_IP, &si_other.sin_addr)==0) {
         fprintf(stderr, "inet_aton() failed\n");
-        exit(1);
+        exit(EXIT_FAILURE);
     }
 
     for (i=0; i<10; i++) {
-        printf("Sending packet %d\n", i);
+        printf("client: Sending packet %d\n", i);
         sprintf(buf, "This is packet %d", i);
         if ( (res = sendto(s, buf, BUFLEN, 0, (struct sockaddr *) &si_other,
                            slen))== -1) {
             fprintf(stderr, "sendto() failed\n");
-            exit(1);
+            exit(EXIT_FAILURE);
         }
     }
 
     close(s);
     if (do_fork)
-        exit(0);
+        exit(EXIT_SUCCESS);
     return 0;
 }
 
@@ -128,13 +167,13 @@ int main(int argc, char ** argv)
         if (strcmp(argv[1], "client") == 0) {
             mode = SINGLE;
             client();
-            return 0;
+            return EXIT_SUCCESS;
         }
 
         if (strcmp(argv[1], "server") == 0) {
             mode = SINGLE;
             server();
-            return 0;
+            return EXIT_SUCCESS;
         }
 
         if (strcmp(argv[1], "fork") == 0) {
@@ -146,7 +185,11 @@ int main(int argc, char ** argv)
 old:
         pipe(pipefds);
 
-        int pid = fork();
+        pid_t pid = fork();
+        if (pid < 0) {
+            perror("fork");
+            exit(EXIT_FAILURE);
+        }
 
         if (pid == 0)
             client();
@@ -156,5 +199,5 @@ old:
         }
     }
 
-    return 0;
+    return EXIT_SUCCESS;
 }
