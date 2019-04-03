@@ -352,6 +352,7 @@ def get_memory_areas(manifest, attr, args):
     areas.append(MemoryArea('pal', file=args['libpal'], flags=PAGEINFO_REG))
 
     if 'exec' in args:
+        # W is needed for fork/exec emulation.
         areas.append(MemoryArea('exec', file=args['exec'],
                                 flags=PAGEINFO_W|PAGEINFO_REG))
     return areas

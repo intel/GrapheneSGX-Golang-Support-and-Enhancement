@@ -382,6 +382,7 @@ int initialize_enclave (struct pal_enclave * enclave)
 
     struct mem_area* exec_area = NULL;
     if (enclave->exec != -1) {
+        /* this area needs wriable for fork/exec */
         areas[area_num] = (struct mem_area) {
             .desc = "exec", .skip_eextend = false, .is_binary = true,
             .fd = enclave->exec, .addr = 0, .size = 0 /* set below */,
