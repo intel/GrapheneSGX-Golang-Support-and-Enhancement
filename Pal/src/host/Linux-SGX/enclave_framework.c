@@ -590,7 +590,7 @@ int copy_and_verify_trusted_file (const char * path, const void * umem,
          * XXX: Maybe we should zero the buffer after denying the access?
          */
         if (memcmp(s, hash, sizeof(sgx_stub_t))) {
-            SGX_DBG(DBG_E, "Accesing file:%s is denied. Does not match with MAC"
+            SGX_DBG(DBG_E, "Accesing file:\"%s\" is denied. Does not match with MAC"
                     " at chunk starting at %lu-%lu.\n",
                     path, checking, checking_end);
             return -PAL_ERROR_DENIED;
@@ -674,12 +674,12 @@ static int register_trusted_file (const char * uri, const char * checksum_str)
         }
 
         new->index = (++trusted_file_indexes);
-        SGX_DBG(DBG_S, "trusted: [%ld] %s %s\n", new->index,
+        SGX_DBG(DBG_S, "trusted: [%ld] %s \"%s\"\n", new->index,
                 checksum_text, new->uri);
     } else {
         memset(&new->checksum, 0, sizeof(sgx_checksum_t));
         new->index = 0;
-        SGX_DBG(DBG_S, "allowed: %s\n", new->uri);
+        SGX_DBG(DBG_S, "allowed: \"%s\"\n", new->uri);
     }
 
     _DkSpinLock(&trusted_file_lock);
