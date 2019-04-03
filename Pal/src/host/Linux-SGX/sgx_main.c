@@ -474,7 +474,7 @@ int initialize_enclave (struct pal_enclave * enclave)
                 gs->enclave_size = enclave->size;
                 gs->tcs_offset = tcs_area->addr + pagesize * t;
                 gs->initial_stack_offset =
-                    stack_areas[t].addr + ENCLAVE_STACK_SIZE;
+                    ALIGN_DOWN_PTR(stack_areas[t].addr + ENCLAVE_STACK_SIZE, 16UL);
                 gs->sig_stack_low =
                     sig_stack_areas[t].addr + enclave_secs.baseaddr;
                 gs->sig_stack_high =
