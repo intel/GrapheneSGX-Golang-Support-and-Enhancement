@@ -64,7 +64,14 @@ static-exec_fork
 static-fork
 static-fork_bomb
 static-fork_exec
+static-helloworld
 static-sigaltstack
+static-signostack
+static-system
+static-tcp
+static-tcp.c
+static-udp
+static-unix
 static-vfork
 static-vfork_exec
 sync.pthread
