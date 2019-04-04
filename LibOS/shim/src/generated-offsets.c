@@ -30,6 +30,9 @@ void dummy(void)
     OFFSET(SHIM_REGS_RSP, shim_regs, rsp);
     OFFSET(SHIM_REGS_R15, shim_regs, r15);
     OFFSET(SHIM_REGS_RIP, shim_regs, rip);
+#ifdef SHIM_SYSCALL_STACK
+    OFFSET_T(TCB_SYSCALL_STACK, shim_tcb_t, syscall_stack);
+#endif
     OFFSET_T(TCB_FLAGS, shim_tcb_t, flags);
     DEFINE(SHIM_REGS_SIZE, sizeof(struct shim_regs));
 

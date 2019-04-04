@@ -91,11 +91,21 @@ int shim_do_sigreturn (int __unused)
     __UNUSED(__unused);
     shim_tcb_t *tcb = shim_get_tls();
     ucontext_t * user_uc = (ucontext_t*)tcb->context.regs->rsp;
+    struct shim_regs* regs = tcb->context.regs;
+
+#ifdef SHIM_SYSCALL_STACK
+    if ((void*)regs->rip == &syscall_wrapper_after_syscalldb) {
+        assert((unsigned long)tcb->tp->syscall_stack < regs->rsp);
+        assert(regs->rsp <
+               (unsigned long)tcb->tp->syscall_stack + SHIM_THREAD_SYSCALL_STACK_SIZE);
+        /* see syscall_wrapper(): signal frame is on user stack. */
+        user_uc = (void *)tcb->context.regs->r11;
+    }
+#endif
 
     debug("sigreturn thread %d regs: %p sp: %08lx "
           "user_uc: %p gregs.rsp: %08lx gregs.rip: %08lx\n",
-          get_cur_thread()->tid, tcb->context.regs, tcb->context.regs->rsp,
-          user_uc,
+          get_cur_thread()->tid, regs, regs->rsp, user_uc,
           user_uc->uc_mcontext.gregs[REG_RSP],
           user_uc->uc_mcontext.gregs[REG_RIP]);
 

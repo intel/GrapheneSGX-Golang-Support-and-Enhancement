@@ -213,6 +213,9 @@ static void copy_tcb (shim_tcb_t * new_tcb, const shim_tcb_t * old_tcb)
     new_tcb->tp   = old_tcb->tp;
     memcpy(&new_tcb->context, &old_tcb->context, sizeof(struct shim_context));
     new_tcb->tid  = old_tcb->tid;
+#ifdef SHIM_SYSCALL_STACK
+    new_tcb->syscall_stack = old_tcb->syscall_stack;
+#endif
     new_tcb->flags = new_tcb->flags;
     new_tcb->debug_buf = old_tcb->debug_buf;
 }
@@ -237,9 +240,15 @@ void allocate_tls (__libc_tcb_t * tcb, bool user, struct shim_thread * thread)
         thread->shim_tcb = shim_tcb;
         shim_tcb->tp  = thread;
         shim_tcb->tid = thread->tid;
+#ifdef SHIM_SYSCALL_STACK
+        shim_tcb_init_syscall_stack(shim_tcb, thread);
+#endif
     } else {
         shim_tcb->tp  = NULL;
         shim_tcb->tid = 0;
+#ifdef SHIM_SYSCALL_STACK
+        shim_tcb->syscall_stack = NULL;
+#endif
     }
 
     DkSegmentRegister(PAL_SEGMENT_FS, tcb);
@@ -264,6 +273,9 @@ void populate_tls (__libc_tcb_t * tcb, bool user)
         thread->tcb = tcb;
         thread->user_tcb = user;
         thread->shim_tcb = shim_tcb;
+#ifdef SHIM_SYSCALL_STACK
+        shim_tcb_init_syscall_stack(shim_tcb, thread);
+#endif
     }
 
     DkSegmentRegister(PAL_SEGMENT_FS, tcb);

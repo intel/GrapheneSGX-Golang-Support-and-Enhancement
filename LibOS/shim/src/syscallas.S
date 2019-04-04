@@ -295,12 +295,23 @@ syscall_wrapper:
         .cfi_def_cfa %rsp, 0
         # %rcx is used as input for returning %rip
         .cfi_register %rip, %rcx
+#ifdef SHIM_SYSCALL_STACK
+        ## %rcx, %r11 are preserved by syscalldb
+        movq %rsp, %r11
+        .cfi_def_cfa_register %r11
+        .cfi_register %rsp, %r11
+        movq TCB_SEGMENT_REG:(SHIM_TCB_OFFSET + TCB_SYSCALL_STACK), %rsp
+#else
         # %r11 is used as input to keep %rflags
         .cfi_register %rflags, %r11
         subq $RED_ZONE_SIZE, %rsp
         .cfi_adjust_cfa_offset RED_ZONE_SIZE
+#endif
         callq *syscalldb@GOTPCREL(%rip)
 syscall_wrapper_after_syscalldb:
+#ifdef SHIM_SYSCALL_STACK
+        movq %r11, %rsp
+#else
         addq $RED_ZONE_SIZE, %rsp
         .cfi_adjust_cfa_offset -RED_ZONE_SIZE
         # restore %rflags for syscall abi compatibility.
@@ -313,7 +324,8 @@ syscall_wrapper_after_syscalldb:
         .cfi_same_value %rflags
         pushq %r11
         .cfi_adjust_cfa_offset 8
-        jmp *%rcx
+#endif
+        jmp *%rcx       /* syscalldb preserves %rcx */
 
         .cfi_endproc
         .size syscall_wrapper, .-syscall_wrapper
