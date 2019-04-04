@@ -21,7 +21,7 @@ STATIC_EXECUTABLES_SOURCES = \
 STATIC_EXECUTABLES = $(patsubst %.c, static-%, $(STATIC_EXECUTABLES_SOURCES))
 special_executables += $(STATIC_EXECUTABLES)
 
-exec_target = $(special_executables) $(c_executables) $(cxx_executables) ls.manifest
+exec_target = $(special_executables) $(c_executables) $(cxx_executables) ls.manifest sh.manifest
 target = $(exec_target) $(manifests)
 
 level = ../
