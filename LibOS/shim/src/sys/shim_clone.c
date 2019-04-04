@@ -333,8 +333,38 @@ int shim_do_clone (int flags, void * user_stack_addr, int * parent_tidptr,
             thread->tcb = tcb = self->tcb;
             old_shim_tcb = __alloca(sizeof(shim_tcb_t));
             memcpy(old_shim_tcb, &tcb->shim_tcb, sizeof(shim_tcb_t));
+
             thread->user_tcb = self->user_tcb;
+            thread->shim_tcb = self->shim_tcb;
         }
+        debug("self %p stack [%p, %p)\n",
+              self,
+              self->syscall_stack,
+              self->syscall_stack + SHIM_THREAD_SYSCALL_STACK_SIZE);
+        debug("thread %p stack [%p, %p)\n",
+              thread,
+              thread->syscall_stack,
+              thread->syscall_stack + SHIM_THREAD_SYSCALL_STACK_SIZE);
+        debug("tcb: regs %p rsp %08lx rip %08lx %p stack %p tp %p thread stack [%p, %p) 0x%08lx\n",
+              tcb->shim_tcb.context.regs,
+              tcb->shim_tcb.context.regs->rsp,
+              tcb->shim_tcb.context.regs->rip,
+              &syscall_wrapper_after_syscalldb,
+              tcb->shim_tcb.syscall_stack,
+              tcb->shim_tcb.tp,
+              thread->syscall_stack,
+              thread->syscall_stack + SHIM_THREAD_SYSCALL_STACK_SIZE,
+              (void*)tcb->shim_tcb.context.regs - (void*)thread->syscall_stack);
+        debug("shim tcb: regs %p rsp %08lx rip %08lx %p %p tp %p thread stack [%p, %p) 0x%08lx\n",
+              thread->shim_tcb->context.regs,
+              thread->shim_tcb->context.regs->rsp,
+              thread->shim_tcb->context.regs->rip,
+              &syscall_wrapper_after_syscalldb,
+              thread->shim_tcb->syscall_stack,
+              thread->shim_tcb->tp,
+              thread->syscall_stack,
+              thread->syscall_stack + SHIM_THREAD_SYSCALL_STACK_SIZE,
+              (void*)thread->shim_tcb->context.regs - (void*)thread->syscall_stack);
 
         if (user_stack_addr) {
             struct shim_vma_val vma;
@@ -345,6 +375,7 @@ int shim_do_clone (int flags, void * user_stack_addr, int * parent_tidptr,
             tcb->shim_tcb.context.regs->rsp = (unsigned long)user_stack_addr;
         }
 
+        thread->tgid = thread->tid;
         thread->is_alive = true;
         thread->in_vm = false;
         add_thread(thread);
@@ -361,6 +392,7 @@ int shim_do_clone (int flags, void * user_stack_addr, int * parent_tidptr,
         lock(&thread->lock);
         handle_map = thread->handle_map;
         thread->handle_map = NULL;
+        thread->shim_tcb = NULL;
         unlock(&thread->lock);
 
         if (handle_map)

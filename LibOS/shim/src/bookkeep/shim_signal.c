@@ -1153,10 +1153,9 @@ bool deliver_signal_on_sysret(void * stack, uint64_t syscall_ret)
     bool rewind_syscall_stack = false;
     if ((void*)tcb->context.regs->rip == &syscall_wrapper_after_syscalldb) {
         rewind_syscall_stack = true;
-        debug("syscall stack\n");
         struct shim_regs* regs = tcb->context.regs;
         assert((unsigned long)tcb->tp->syscall_stack < regs->rsp);
-        assert(regs->rsp <
+        assert(regs->rsp <=
                (unsigned long)tcb->tp->syscall_stack +
                SHIM_THREAD_SYSCALL_STACK_SIZE);
         /* see syscall_wrapper()
