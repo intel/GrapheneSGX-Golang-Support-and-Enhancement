@@ -59,7 +59,7 @@ allocate_signal_log (struct shim_thread * thread, int sig)
     shim_tcb_t * shim_tcb = thread->shim_tcb;
     set_bit(SHIM_FLAG_SIGPENDING, &shim_tcb->flags);
 
-    debug("signal set_bit thread: %p tcb: %p &tcb->flags: %p tcb->flags 0x%lx "
+    debug("signal set_bit thread: %p shim_tcb: %p &tcb->flags: %p tcb->flags 0x%lx "
           "tcb->tid %d counter = %ld\n",
           thread, thread->tcb, &shim_tcb->flags, shim_tcb->flags, shim_tcb->tid,
           thread->has_signal.counter);

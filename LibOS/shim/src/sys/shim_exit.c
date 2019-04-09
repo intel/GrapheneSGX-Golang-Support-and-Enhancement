@@ -183,8 +183,14 @@ noreturn static void exit_late (int error_code, void (*func)(int))
      * other thread can access thread and thread->tcb.
      * so really switch shim_tls to the one in shim_thread.
      */
-    copy_tcb(&cur_thread->exit_tcb.shim_tcb, shim_get_tls());
-    cur_thread->shim_tcb = &cur_thread->exit_tcb.shim_tcb;
+    shim_tcb_t * exit_shim_tcb;
+#ifdef SHIM_TCB_USE_GS
+    exit_shim_tcb = &cur_thread->exit_shim_tcb;
+#else
+    exit_shim_tcb = &cur_thread->exit_tcb.shim_tcb;
+#endif
+    copy_tcb(exit_shim_tcb, shim_get_tls());
+    cur_thread->shim_tcb = exit_shim_tcb;
 
     int ret;
     __asm__ volatile(

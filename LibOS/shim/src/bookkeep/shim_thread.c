@@ -47,7 +47,7 @@ PAL_HANDLE thread_start_event = NULL;
 
 //#define DEBUG_REF
 
-int init_thread (void)
+int init_thread (__libc_tcb_t * libc_tcb)
 {
     create_lock(&thread_list_lock);
 
@@ -59,6 +59,7 @@ int init_thread (void)
         return -ENOMEM;
 
     cur_thread->in_vm = cur_thread->is_alive = true;
+    cur_thread->tcb = libc_tcb;
     set_cur_thread(cur_thread);
     add_thread(cur_thread);
     cur_thread->pal_handle = PAL_CB(first_thread);
@@ -771,6 +772,7 @@ static int resume_wrapper (void * param)
     __libc_tcb_t * libc_tcb = thread->tcb;
     assert(libc_tcb);
     shim_tcb_t * tcb = thread->shim_tcb;
+    assert(tcb);
     assert(tcb->context.regs && tcb->context.regs->rsp);
 
     thread->in_vm = thread->is_alive = true;

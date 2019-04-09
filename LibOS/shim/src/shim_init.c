@@ -222,12 +222,13 @@ void copy_tcb (shim_tcb_t * new_tcb, const shim_tcb_t * old_tcb)
 /* This function is used to allocate tls before interpreter start running */
 void allocate_tls (__libc_tcb_t * tcb, bool user, struct shim_thread * thread)
 {
-    assert(tcb);
-    tcb->tcb = tcb;
     shim_tcb_t * shim_tcb;
+    assert(tcb);
+
 #ifdef SHIM_TCB_USE_GS
     shim_tcb = shim_get_tls();
 #else
+    tcb->tcb = tcb;
     shim_tcb = &tcb->shim_tcb;
 #endif
     init_tcb(shim_tcb);
@@ -255,13 +256,13 @@ void allocate_tls (__libc_tcb_t * tcb, bool user, struct shim_thread * thread)
 
 void populate_tls (__libc_tcb_t * tcb, bool user)
 {
-    assert(tcb);
-    tcb->tcb = tcb;
-
     shim_tcb_t * shim_tcb;
+    assert(tcb);
+
 #ifdef SHIM_TCB_USE_GS
     shim_tcb = shim_get_tls();
 #else
+    tcb->tcb = tcb;
     shim_tcb = &tcb->shim_tcb;
     copy_tcb(shim_tcb, shim_get_tls());
 #endif
@@ -803,7 +804,7 @@ restore:
 
     RUN_INIT(init_mount_root);
     RUN_INIT(init_ipc);
-    RUN_INIT(init_thread);
+    RUN_INIT(init_thread, &tcb);
     RUN_INIT(init_mount);
     RUN_INIT(init_important_handles);
     RUN_INIT(init_async);
