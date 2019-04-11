@@ -14,6 +14,15 @@ fs.mount.bin.uri = file:/bin
 sys.brk.size = 32M
 sys.stack.size = 4M
 
+# allow to bind on port 8000
+net.allow_bind.1 = 127.0.0.1:8000
+# allow to connect to port 8000
+net.allow_peer.1 = 127.0.0.1:8000
+
+# sgx-related
+sgx.debug = 1
+sgx.thread_num = 16
+
 sgx.trusted_files.ld = file:$(LIBCDIR)/ld-linux-x86-64.so.2
 sgx.trusted_files.libc = file:$(LIBCDIR)/libc.so.6
 sgx.trusted_files.libdl = file:$(LIBCDIR)/libdl.so.2
@@ -24,4 +33,6 @@ sgx.trusted_files.script1_sh = file:script1.sh
 sgx.trusted_files.script2_sh = file:script2.sh
 sgx.trusted_files.script3_sh = file:script3.sh
 sgx.trusted_files.helloworld = file:helloworld
+
 sgx.trusted_children.helloworld = file:helloworld.sig
+

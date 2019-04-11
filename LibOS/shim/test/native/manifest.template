@@ -29,17 +29,5 @@ sgx.trusted_files.libm = file:$(LIBCDIR)/libm.so.6
 sgx.trusted_files.libpthread = file:$(LIBCDIR)/libpthread.so.0
 sgx.thread_num = 16
 
-# sgx.trusted_files.unix_pipe = file:unix.c   # used by unix
-# sgx.trusted_files.sh = file:/bin/sh  # used by system
-# sgx.trusted_files.dash = file:/bin/dash  # used by system
-# sgx.trusted_files.fork = file:fork  # used by exec_fork
-# sgx.trusted_files.helloworld = file:helloworld  # used by system
-# sgx.trusted_files.tcp_c = file:tcp.c    # used by tcp
-
-
-sgx.trusted_files.unix_pipe = file:unix.c
-sgx.trusted_files.sh = file:/bin/sh
-sgx.trusted_files.dash = file:/bin/dash
-sgx.trusted_files.fork = file:fork
-sgx.trusted_files.helloworld = file:helloworld
-sgx.trusted_files.tcp_c = file:tcp.c
+sgx.trusted_files.unix_pipe = file:unix.c   # used by unix
+sgx.trusted_files.tcp_c = file:tcp.c        # used by tcp
