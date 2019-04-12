@@ -836,7 +836,6 @@ extern void * __syscallas_signal_allowed_2_begin;
 extern void * __syscallas_signal_allowed_2_end;
 extern void * __syscallas_signal_allowed_3_begin;
 extern void * __syscallas_signal_allowed_3_end;
-extern void * __syscallas_need_emulate_jmp;
 
 /* cleanup and terminate process, preserve exit code if err == 0 */
 int shim_clean (int err);

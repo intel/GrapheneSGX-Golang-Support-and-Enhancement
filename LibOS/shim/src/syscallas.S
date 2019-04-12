@@ -42,7 +42,6 @@
         .global __syscallas_signal_allowed_2_end
         .global __syscallas_signal_allowed_3_begin
         .global __syscallas_signal_allowed_3_end
-        .global __syscallas_need_emulate_jmp
         .type __syscallas_signal_allowed_0_begin, @object
         .type __syscallas_signal_allowed_0_end, @object
         .type __syscallas_signal_allowed_1_begin, @object
@@ -51,7 +50,6 @@
         .type __syscallas_signal_allowed_2_end, @object
         .type __syscallas_signal_allowed_3_begin, @object
         .type __syscallas_signal_allowed_3_end, @object
-        .type __syscallas_need_emulate_jmp, @object
 
 #ifdef SHIM_TCB_USE_GS
 # define TCB_SEGMENT_REG	%gs
@@ -262,23 +260,11 @@ __syscallas_signal_allowed_2_begin:
         // skip rsp, rip
         addq $(2 * 8), %rsp
 
+        /* avoid to clobber red zone */
+        subq $(RED_ZONE_SIZE + 8), PAL_CONTEXT_RSP - PAL_CONTEXT_EFL(%rsp)
         popfq
-
-        /*
-         * iretq or sysretq can't be used in user space.
-         *
-         * The following two instruction needs to be atomic regarding to
-         * interrupt by signal delivering.
-         * In signal handler in LibOS, if rip == __syscallas_need_emulate_jmp
-         * the following jmp instruction is emulated first, and then proceed to
-         * signal handling and deliver signal to user.
-         *
-         * If signal is delivered at __syscallas_need_emulate_jmp,
-         * the saved rip at 8 bytes below the redzone is clobbered.
-         */
         movq PAL_CONTEXT_RSP - PAL_CONTEXT_CSGSFS(%rsp), %rsp
-__syscallas_need_emulate_jmp:
-        jmp *-RED_ZONE_SIZE-8(%rsp)
+        retq $RED_ZONE_SIZE
 __syscallas_signal_allowed_2_end:
 
         /*
