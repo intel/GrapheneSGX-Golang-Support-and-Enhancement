@@ -119,6 +119,7 @@ void save_xregs(PAL_XREGS_STATE * xsave_area);
 void restore_xregs(const PAL_XREGS_STATE * xsave_area);
 int init_trusted_files (void);
 noreturn void __restore_sgx_context (sgx_context_t *uc);
+noreturn void __restore_sgx_context_retry (sgx_context_t *uc);
 
 /* Function: load_trusted_file
  * checks if the file to be opened is trusted or allowed,

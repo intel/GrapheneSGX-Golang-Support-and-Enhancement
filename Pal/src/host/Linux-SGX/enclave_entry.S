@@ -10,8 +10,27 @@
 	jmp .Lfail_loop\@
 .endm
 
+# If this enclave thread has not been initialized yet, we should not
+# try to call an event handler yet.
+.macro FAIL_LOOP_IF_NOT_READY_FOR_EXCEPTIONS
+	cmpq $0, %gs:SGX_READY_FOR_EXCEPTIONS
+	jne 1f
+	FAIL_LOOP
+1:
+.endm
+
 .macro WRFSBASE_RBX
 	.byte 0xf3, 0x48, 0x0f, 0xae, 0xd3 /* WRFSBASE %RBX */
+.endm
+
+.macro SGX_TLS_FLAGS_SET_EXECUTING_BIT reg
+	movq %gs:SGX_SELF, \reg
+	lock btsq $SGX_TLS_FLAGS_EVENT_EXECUTING_BIT, SGX_FLAGS(\reg)
+.endm
+
+.macro SGX_TLS_FLAGS_CLEAR_EXECUTING_BIT reg
+	movq %gs:SGX_SELF, \reg
+	lock btrq $SGX_TLS_FLAGS_EVENT_EXECUTING_BIT, SGX_FLAGS(\reg)
 .endm
 
 	.extern ecall_table
@@ -124,7 +143,8 @@ enclave_entry:
 
 	movq %rdi, %rsi
 	xorq %rdi, %rdi
-	movl SGX_GPR_EXITINFO(%rbx), %edi
+	movl $0, %edi
+	xchgl %edi, SGX_GPR_EXITINFO(%rbx) ## don't carry this info for next resume
 	testl $0x80000000, %edi
 	jnz .Lhandle_exception
 
@@ -132,7 +152,7 @@ enclave_entry:
 	# use external event - only the first 8 bits count
 	andl $0xff, %edi
 	cmpl $0, %edi
-	jne .Lhandle_exception
+	jne .Lhandle_exception_raise
 
 	# clear the registers
 	xorq %rdi, %rdi
@@ -142,14 +162,6 @@ enclave_entry:
 	movq %rdx, %rbx
 
 	jmp .Lclear_and_eexit
-
-.Lhandle_exception:
-	# If this enclave thread has not been initialized yet, we should not
-	# try to call an event handler yet.
-	cmpq $0, %gs:SGX_READY_FOR_EXCEPTIONS
-	jne 1f
-	FAIL_LOOP
-1:
 
 	## There is a race between host signal delivery and restoring %rsp
 	## in this entry code. We must be careful to setup %rsp.
@@ -316,6 +328,31 @@ enclave_entry:
 	movq $0, %gs:SGX_OCALL_PREPARED
 4:
 
+.Lhandle_exception_raise:
+	FAIL_LOOP_IF_NOT_READY_FOR_EXCEPTIONS
+
+	SGX_TLS_FLAGS_SET_EXECUTING_BIT %rax
+	jnc .Lhandle_exception__
+
+	cmpq $PAL_EVENT_QUIT, %rdi
+	je .Lpend_async_event
+	cmpq $PAL_EVENT_SUSPEND, %rdi
+	je .Lpend_async_event
+	cmpq $PAL_EVENT_RESUME, %rdi
+	je .Lpend_async_event
+	jmp .Lhandle_exception__
+
+.Lpend_async_event:
+	# %rdi = $PAL_EVENT_QUIT or $PAL_EVENT_SUSPEND or $PAL_EVENT_RESUME
+	lock btsq %rdi, SGX_PENDING_ASYNC_EVENT(%rax)
+	lock btsq $SGX_TLS_FLAGS_ASYNC_EVENT_PENDING_BIT, SGX_FLAGS(%rax)
+	jmp .Lhandle_exception__
+
+.Lhandle_exception:
+	FAIL_LOOP_IF_NOT_READY_FOR_EXCEPTIONS
+
+	SGX_TLS_FLAGS_SET_EXECUTING_BIT %rax
+.Lhandle_exception__:
 	# %rbx SGX_GPR base address from TLS
 	movq SGX_GPR_RSP(%rbx), %rsi
 
@@ -663,11 +700,69 @@ __restore_sgx_context:
 	popq %r14
 	popq %r15
 
+	/* void to clobber red zone */
+	subq $(RED_ZONE_SIZE + 8), SGX_CONTEXT_RSP - SGX_CONTEXT_RFLAGS(%rsp)
+	popfq
+	movq SGX_CONTEXT_RSP - SGX_CONTEXT_RIP(%rsp), %rsp
+	retq $RED_ZONE_SIZE
+
+	# void __restore_sgx_context_retry (sgx_context_t *uc)
+	# __attribute__((noreturn))
+	.global __restore_sgx_context_retry
+	.type __restore_sgx_context_retry, @function
+__restore_sgx_context_retry:
+	movq %rdi, %rsp
+
+	popq %rax
+	popq %rcx
+	popq %rdx
+	popq %rbx
+	addq $8, %rsp /* don't popq RSP yet */
+	popq %rbp
+	popq %rsi
+	popq %rdi
+	popq %r8
+	popq %r9
+	popq %r10
+	popq %r11
+	popq %r12
+	popq %r13
+
+	SGX_TLS_FLAGS_CLEAR_EXECUTING_BIT %r15
+	/* There is a window from here to movq below where stack
+	 * can grow. */
+	lock btrq $SGX_TLS_FLAGS_ASYNC_EVENT_PENDING_BIT, SGX_FLAGS(%r15)
+	jc .Ltry_again
+
+	/* store saved %rip at -RED_ZONE_SIZE-8(%saved rsp) */
+	## there is sgx_context_t + xsave area + 8 bytes + redzone
+	## is allocated on the stack. So it doesn't clobber saved
+	## registers.
+	##
+	## see the definition of sgx_context_t
+	## currently %rsp is pointing to %r14
+	movq SGX_CONTEXT_RSP - SGX_CONTEXT_R14(%rsp), %r14
+	movq SGX_CONTEXT_RIP - SGX_CONTEXT_R14(%rsp), %r15
+	movq %r15, - RED_ZONE_SIZE - 8(%r14)
+
+	popq %r14
+	popq %r15
+
 	/* avoid to clobber red zone */
 	subq $(RED_ZONE_SIZE + 8), SGX_CONTEXT_RSP - SGX_CONTEXT_RFLAGS(%rsp)
 	popfq
 	movq SGX_CONTEXT_RSP - SGX_CONTEXT_RIP(%rsp), %rsp
 	retq $RED_ZONE_SIZE
+
+.Ltry_again:
+	lock btsq $SGX_TLS_FLAGS_EVENT_EXECUTING_BIT, SGX_FLAGS(%r15)
+	## XXX TODO. check if the stack
+	## what if %rsp was on signal stack.
+	## just substracting %rsp doesn't work. check %rsp is
+	## in signal stack.
+	subq $SGX_CONTEXT_R14, %rsp # revert popq
+	movq %rsp, %rdi
+	callq _DkExceptionHandlerMore
 
 	# void save_xregs(uint64_t xsave_area)
 	.global save_xregs
