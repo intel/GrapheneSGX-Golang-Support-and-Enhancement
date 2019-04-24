@@ -182,7 +182,7 @@ static inline bool test_and_set_bit(long nr, volatile unsigned long *addr)
     __asm__ __volatile__("lock btsq %2, %0\n"
                          : "+m"(*addr), "=@ccc"(cc_carry)
                          : "Ir"(nr)
-                         : "memory");
+                         : "memory", "cc");
     return cc_carry;
 }
 
@@ -192,7 +192,7 @@ static inline bool test_and_clear_bit(long nr, volatile unsigned long *addr)
     __asm__ __volatile__("lock btrq %2, %0\n"
                          : "+m"(*addr), "=@ccc"(cc_carry)
                          : "Ir"(nr)
-                         : "memory");
+                         : "memory", "cc");
     return cc_carry;
 }
 
