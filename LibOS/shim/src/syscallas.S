@@ -126,6 +126,7 @@ __syscallas_signal_allowed_0_end:
         ##   %rdi
         ##   %rbx
         ##   %rbp: previous %rbp <= %rbp: current %rbp
+        ##   %rflags
         ## %rip: saved RIP
         ## previous stack frame
         movq %rbp, TCB_SEGMENT_REG:(SHIM_TCB_OFFSET + TCB_REGS)
@@ -180,14 +181,15 @@ __syscallas_signal_allowed_1_end:
         /*
          * allocate signal stack frame
          *
-         * struct shim_context: 16B align + 8
-         *                      sizeof(struct shim_context) = 0x38
+         * struct shim_regs: 16B align + 8
+         *                   sizeof(struct shim_regs) = 0x78
          * rip to signal handler: 8 bytes
          * struct sigframe
          *   restorer: 8 bytes
          *   ucontext_t: 16 bytes align
          *   siginfo_t
-         * struct _libc_fptstate: 64 bytes align: fpu_xstate_size
+         * [ optionally padding to align fpstate ]
+         * struct _libc_fpstate: 64 bytes align: fpu_xstate_size
          * extended area
          * FP_XSTATE_MAGIC2
          */
@@ -201,15 +203,17 @@ __syscallas_signal_allowed_1_end:
 
         movq %rsp, %r11
         movq %rdi, %rsp
-        subq $8, %rsp           # to align 16bytes for below callq
-                                # notice the below pushq beforew callq
         movq %rax, %rsi
         pushq %r11
         pushq %rsi # save %rax in case that signal is not delivered
+        pushq %rbp
+        movq %rsp, %rbp
+        andq $~15, %rsp
         call *deliver_signal_on_sysret@GOTPCREL(%rip)
+        movq %rbp, %rsp
+        popq %rbp
         popq %rsi
         popq %r11
-        addq $8, %rsp
         cmp $0, %rax
         movq %rsi, %rax # %rsi conatins returning %rax saved above
         je .Lsignal_not_delivered
