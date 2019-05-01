@@ -1,7 +1,15 @@
 special_executables = static pie
 c_executables = $(filter-out $(special_executables),$(patsubst %.c,%,$(wildcard *.c)))
 cxx_executables = $(patsubst %.cpp,%,$(wildcard *.cpp))
-manifests = $(patsubst %.template,%,$(wildcard *.manifest.template)) manifest
+out_of_tree_executables = \
+	ls \
+	sh
+manifests = \
+	$(patsubst %.template,%,$(wildcard *.manifest.template)) \
+	$(addsuffix .manifest,$(out_of_tree_executables)) \
+	manifest
+sig_files_extra = $(addsuffix .sig,$(out_of_tree_executables))
+token_files_extra = $(addsuffix .token,$(out_of_tree_executables))
 
 STATIC_EXECUTABLES_SOURCES = \
 	alarm.c \
@@ -21,7 +29,7 @@ STATIC_EXECUTABLES_SOURCES = \
 STATIC_EXECUTABLES = $(patsubst %.c, static-%, $(STATIC_EXECUTABLES_SOURCES))
 special_executables += $(STATIC_EXECUTABLES)
 
-exec_target = $(special_executables) $(c_executables) $(cxx_executables) ls.manifest sh.manifest
+exec_target = $(special_executables) $(c_executables) $(cxx_executables)
 target = $(exec_target) $(manifests)
 
 level = ../
