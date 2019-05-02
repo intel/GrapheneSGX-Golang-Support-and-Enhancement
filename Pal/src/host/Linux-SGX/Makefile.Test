@@ -7,13 +7,21 @@ SGX_SIGN = $(SGX_DIR)/signer/pal-sgx-sign -libpal $(LIBPAL) -key $(SGX_SIGNER_KE
 SGX_GET_TOKEN = $(SGX_DIR)/signer/pal-sgx-get-token
 
 ifeq ($(SGX_RUN),1)
-
-expand_target = $(foreach t,$(filter-out manifest,$(1)),$(patsubst %.manifest,%.token,$(t)))
+expand_target = \
+	$(foreach t,$(filter-out manifest,$(1)),\
+		$(patsubst %.manifest,%.token,$(t))) \
+	$(foreach t,$(filter-out %.manifest,$(filter-out manifest,$(1))),\
+		$(patsubst %,%.token,$(t)))
 
 else
 
-expand_target = $(1) $(foreach t,$(filter-out manifest,$(1)), \
-		$(patsubst %.manifest,%.manifest.sgx,$(t))) $(wildcard *.sig)
+expand_target = \
+	$(1) \
+	$(foreach t,$(filter-out manifest,$(1)), \
+		$(patsubst %.manifest,%.manifest.sgx,$(t))) \
+	$(foreach t,$(filter-out %.manifest,$(filter-out manifest,$(1))), \
+		$(patsubst %,%.sig,$(t))) \
+	$(wildcard *.sig)
 
 $(SGX_SIGNER_KEY):
 	$(error "Cannot find any enclave key. Generate $(abspath $(SGX_SIGNER_KEY)) or specify 'SGX_SIGNER_KEY=' with make")
