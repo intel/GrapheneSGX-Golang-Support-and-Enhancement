@@ -1300,6 +1300,7 @@ void * stack_before_call __attribute_unused = NULL;
 
 #define CALL_ENTRY(l, cookies)                                          \
     ({  long ret;                                                       \
+        assert(((uintptr_t)cookies) % 16 == 0);                         \
         __asm__ volatile(                                               \
                      "pushq $0\r\n"                                     \
                      "popfq\r\n"                                        \
