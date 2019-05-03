@@ -2,6 +2,7 @@
 *.cached
 *.sig
 *.sgx
+*.token
 
 # generated file
 manifest
