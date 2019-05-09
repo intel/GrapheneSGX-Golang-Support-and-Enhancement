@@ -21,6 +21,7 @@
 #include "pal_linux_defs.h"
 #include "pal.h"
 #include "api.h"
+#include "pal_security.h"
 
 #include "linux_types.h"
 #include "sgx_arch.h"
@@ -241,9 +242,11 @@ static inline PAL_IDX current_tid(void)
     do {                                                                \
         if ((class) & DBG_LEVEL) {                                      \
             PAL_IDX tid = current_tid();                                \
-            printf("[trts %d:%ld] %s:%d:%s " fmt,                       \
+            printf("[trts %d:%ld] %s:%d:%s \"%s\":\"%s\" " fmt,         \
                    tid, get_enclave_tls()->common.host_tid,             \
-                   __FILE__, __LINE__, __func__, ##__VA_ARGS__);        \
+                   __FILE__, __LINE__, __func__,                        \
+                   pal_sec.exec_name, pal_sec.manifest_name,            \
+                   ##__VA_ARGS__);                                      \
         }                                                               \
     } while (0)
 #else
