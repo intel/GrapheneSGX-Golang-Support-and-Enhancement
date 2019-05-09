@@ -26,6 +26,7 @@ endif
 export Q quiet BUILD_VERBOSE
 
 squote  := '
+# ' # make syntax highliting happy
 escsq = $(subst $(squote),'\$(squote)',$1)
 
 echo-cmd = $(if $($(quiet)cmd_$(1)), echo '  $(call escsq,$($(quiet)cmd_$(1)))';)
