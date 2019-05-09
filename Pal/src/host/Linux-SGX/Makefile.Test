@@ -29,8 +29,10 @@ $(SGX_SIGNER_KEY):
 endif
 
 prerequisite = \
-	for f in `sed -e 's/\#.*//g' $(1) | grep -Po 'sgx.trusted_children.[^\\s=]+\\s*=\\s*file:\\K\\S+'`; do \
-		$(MAKE) $${f%.sig}.manifest.sgx; \
+	for f in `sed -e 's/\#.*//g' $(1) | grep -Po 'sgx\.trusted_children\.[^\\s=]+\\s*=\\s*file:\\K\\S+'`; do \
+		if [ -n "$${f}" ]; then \
+			$(MAKE) $${f%.sig}.manifest.sgx; \
+		fi; \
 	done
 
 find_manifest = $(patsubst %.template,%,$(if $(wildcard $(1).manifest.template),$(1).manifest.template,manifest.template))
