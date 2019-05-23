@@ -3,6 +3,7 @@
 # executables
 /channel
 /execing-process
+/getwd
 /goroutine
 /goroutines
 /goroutines-list

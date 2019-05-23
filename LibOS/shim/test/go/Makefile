@@ -7,6 +7,7 @@ all: $(target)
 go_executables = \
 	channel \
 	execing-process \
+	getwd \
 	goroutines-list \
 	goroutines-stress \
 	goroutine \
