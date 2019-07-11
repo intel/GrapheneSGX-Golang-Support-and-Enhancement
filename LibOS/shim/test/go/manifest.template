@@ -21,8 +21,10 @@ net.allow_bind.1 = 127.0.0.1:8000
 net.allow_peer.1 = 127.0.0.1:8000
 
 # sgx.enclave_size = 8G
-sgx.enclave_size = 2G
+# sgx.enclave_size = 2G
 # sgx.enclave_size = 1G
+sgx.enclave_size = 512M
+# sgx.enclave_size = 256M
 # sgx.enclave_size = 128M
 
 sgx.thread_num = 16

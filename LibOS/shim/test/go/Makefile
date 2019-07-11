@@ -1,5 +1,6 @@
 #GOROOT ?= $(shell go env GOROOT)
-GOROOT ?= /home/yamahata/graphene/devel/go/go
+#GOROOT ?= /home/yamahata/graphene/devel/go/go
+GOROOT ?= /home/yamahata/graphene/devel/go/go-1.11.5/go
 GO = $(GOROOT)/bin/go
 
 all: $(target)
