@@ -7,4 +7,10 @@
  (asm-mode . ((indent-tabs-mode . t)))
  (shell-script-mode . ((indent-tabs-mode . t)))
  ((nil . ((truncate-lines . t)))
-          (text-mode . ((eval . ((turn-on-auto-fill)))))))
+  (text-mode . ((eval . ((turn-on-auto-fill))))))
+ ("LibOS/glibc-2.19"
+  . ((nil . ((tab-width . 8)))))
+ ("LibOS/shim/src/syscallas.S"
+  . ((nil . ((indent-tabs-mode . nil)
+             (c-basic-offset . 8)))))
+ )
