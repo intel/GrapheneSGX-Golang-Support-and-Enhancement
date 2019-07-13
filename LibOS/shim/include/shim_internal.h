@@ -80,12 +80,21 @@ void __debug_context(const char * file, const int line, const char * func,
 void __debug_hex(const char * file, const int line, const char * func,
                  unsigned long * addr, int count);
 
-#define debug_regs(regs)                                \
-    __debug_regs(__FILE__, __LINE__, __func__, (regs))
-#define debug_context(context) \
-    __debug_context(__FILE__, __LINE__, __func__, (context))
-#define debug_hex(addr, count)                                  \
-    __debug_hex(__FILE__, __LINE__, __func__, (addr), (count))
+#define debug_regs(regs)                                        \
+    do {                                                        \
+        if (debug_handle)                                       \
+            __debug_regs(__FILE__, __LINE__, __func__, (regs)); \
+    } while (0)
+#define debug_context(context)                                          \
+    do {                                                                \
+        if (debug_handle)                                               \
+            __debug_context(__FILE__, __LINE__, __func__, (context));   \
+    } while (0)
+#define debug_hex(addr, count)                                          \
+    do {                                                                \
+        if (debug_handle)                                               \
+            __debug_hex(__FILE__, __LINE__, __func__, (addr), (count)); \
+    } while (0)
 
 
 #define VMID_PREFIX     "[P%05u] [%ld:%ld] "
