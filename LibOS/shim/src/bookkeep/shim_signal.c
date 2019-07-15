@@ -1098,6 +1098,15 @@ int handle_next_signal(ucontext_t * user_uc)
     return 0;
 }
 
+/*
+ * 16-byte alignment on ucontext_t on signal frame
+ * align struct shim_regs to 8 (mod 16) bytes
+ * => align sigframe->us to 16 bytes
+ */
+_Static_assert(
+    (((8 + sizeof(struct shim_regs)) + offsetof(struct sigframe, uc)) % 16) == 0,
+    "signal stack frame isn't aligned to 16 byte on calling deliver_signal_on_sysret");
+
 bool deliver_signal_on_sysret(void * stack, uint64_t syscall_ret)
 {
     shim_tcb_t * tcb = shim_get_tls();
@@ -1256,6 +1265,7 @@ bool deliver_signal_on_sysret(void * stack, uint64_t syscall_ret)
 
     long lmask = -1;
     long hmask = -1;
+    assert(user_fpstate == ALIGN_DOWN_PTR(user_fpstate, 64UL));
     __asm__ volatile("xsave64 (%0)"
                      :: "r"(user_fpstate), "m"(*user_fpstate),
                       "a"(lmask), "d"(hmask)

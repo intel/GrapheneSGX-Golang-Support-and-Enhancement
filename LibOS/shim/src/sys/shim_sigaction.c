@@ -112,6 +112,7 @@ int shim_do_sigreturn (int __unused)
     clear_bit(SHIM_FLAG_SIGPENDING, &tcb->flags);
     while (!handle_next_signal(user_uc)) {
         struct _libc_fpstate * user_fpstate = user_uc->uc_mcontext.fpregs;
+        assert(user_fpstate == ALIGN_DOWN_PTR(user_fpstate, 64UL));
         long lmask = -1;
         long hmask = -1;
         __asm__ volatile("xrstor64 (%0)"

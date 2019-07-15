@@ -112,6 +112,8 @@ __syscallas_signal_allowed_0_begin:
 __syscallas_signal_allowed_0_end:
 
         ## struct shim_regs
+        ##   %orig_rax
+        ##   %rsp
         ##   %r15
         ##   %r14
         ##   %r13
@@ -182,8 +184,7 @@ __syscallas_signal_allowed_1_end:
          * allocate signal stack frame
          *
          * struct shim_regs: 16B align + 8
-         *                   sizeof(struct shim_regs) = 0x78
-         * rip to signal handler: 8 bytes
+         *                   sizeof(struct shim_regs) = 0x90
          * struct sigframe
          *   restorer: 8 bytes
          *   ucontext_t: 16 bytes align
