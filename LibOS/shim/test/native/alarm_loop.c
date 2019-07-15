@@ -14,7 +14,8 @@ volatile int count = 0;
 void handler (int signal)
 {
     count++;
-    printf("alarm goes off count = %d\n", count);
+    int s = count;
+    printf("alarm goes off count = %d &s = %p s = %d\n", count, &s, s);
     fflush(stdout);
     loop = false;
     alarm(1);
@@ -32,6 +33,8 @@ void handler (int signal)
     } else {
         sleep(3);
     }
+    printf("finish alarm handler count = %d &s = %p s = %d\n", count, &s, s);
+    fflush(stdout);
 }
 
 int main(int argc, char ** argv)
