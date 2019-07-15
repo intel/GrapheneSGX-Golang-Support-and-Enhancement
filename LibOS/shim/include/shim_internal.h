@@ -199,6 +199,7 @@ static inline void do_pause (void);
     do { debug("%s (" __FILE__ ":%d)\n", __func__, __LINE__); } while (0)
 
 /* definition for syscall table */
+extern bool fpu_xstate_enabled;
 extern unsigned long fpu_xstate_size;
 void handle_sysret_signal(void);
 void handle_signal (bool delayed_only);

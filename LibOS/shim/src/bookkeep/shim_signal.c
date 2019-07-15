@@ -1263,13 +1263,19 @@ bool deliver_signal_on_sysret(void * stack, uint64_t syscall_ret)
     user_uc->uc_mcontext.fpregs = user_fpstate;
     memset(user_fpstate, 0, fpu_xstate_size);
 
-    long lmask = -1;
-    long hmask = -1;
     assert(user_fpstate == ALIGN_DOWN_PTR(user_fpstate, 64UL));
-    __asm__ volatile("xsave64 (%0)"
-                     :: "r"(user_fpstate), "m"(*user_fpstate),
-                      "a"(lmask), "d"(hmask)
-                     : "memory");
+    if (fpu_xstate_enabled) {
+        long lmask = -1;
+        long hmask = -1;
+        memset(user_fpstate, 0, 8 * 8);
+        __asm__ volatile("xsave64 (%0)"
+                         :: "r"(user_fpstate), "m"(*user_fpstate),
+                          "a"(lmask), "d"(hmask)
+                         : "memory");
+    } else
+        __asm__ volatile("fxsave64 (%0)"
+                         :: "r"(user_fpstate), "m"(*user_fpstate)
+                         : "memory");
     struct _fpx_sw_bytes * user_sw = &user_fpstate->sw_reserved;
     user_sw->magic1 = FP_XSTATE_MAGIC1;
     user_sw->extended_size = fpu_xstate_size + FP_XSTATE_MAGIC2_SIZE;

@@ -57,6 +57,7 @@ _Static_assert(sizeof(struct pthread) <= PAL_LIBOS_TCB_SIZE,
 unsigned long allocsize;
 unsigned long allocshift;
 unsigned long allocmask;
+bool fpu_xstate_enabled = false;
 unsigned long fpu_xstate_size;
 
 /* The following constants will help matching glibc version with compatible
@@ -731,10 +732,12 @@ noreturn void* shim_init (int argc, void * args)
     unsigned int value[4];
 #define XSTATE_CPUID         0x0000000d
     if (DkCpuIdRetrieve(XSTATE_CPUID, 0, value)) {
+        fpu_xstate_enabled = true;
         fpu_xstate_size = value[2]; // ecx
         debug("xstate_size = 0x%lx(%ld)\n", fpu_xstate_size, fpu_xstate_size);
     } else {
         debug("error xstate_size\n");
+        fpu_xstate_enabled = false;
         fpu_xstate_size = sizeof(struct _libc_fpstate);
     }
 

@@ -113,12 +113,17 @@ int shim_do_sigreturn (int __unused)
     while (!handle_next_signal(user_uc)) {
         struct _libc_fpstate * user_fpstate = user_uc->uc_mcontext.fpregs;
         assert(user_fpstate == ALIGN_DOWN_PTR(user_fpstate, 64UL));
-        long lmask = -1;
-        long hmask = -1;
-        __asm__ volatile("xrstor64 (%0)"
-                         :: "r"(user_fpstate), "m"(*user_fpstate),
-                          "a"(lmask), "d"(hmask)
-                         : "memory");
+        if (fpu_xstate_enabled) {
+            long lmask = -1;
+            long hmask = -1;
+            __asm__ volatile("xrstor64 (%0)"
+                             :: "r"(user_fpstate), "m"(*user_fpstate),
+                              "a"(lmask), "d"(hmask)
+                             : "memory");
+        } else
+            __asm__ volatile("fxrstor64 (%0)"
+                             :: "r"(user_fpstate), "m"(*user_fpstate)
+                             : "memory");
         /* no more signals pending. return back */
         __sigreturn(&user_uc->uc_mcontext);
 
