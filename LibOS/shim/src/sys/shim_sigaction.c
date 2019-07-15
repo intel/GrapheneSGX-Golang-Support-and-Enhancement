@@ -104,10 +104,11 @@ int shim_do_sigreturn (int __unused)
 #endif
 
     debug("sigreturn thread %d regs: %p sp: %08lx "
-          "user_uc: %p gregs.rsp: %08lx gregs.rip: %08lx\n",
+          "user_uc: %p gregs.rsp: %08lx gregs.rip: %08lx fpstate %p\n",
           get_cur_thread()->tid, regs, regs->rsp, user_uc,
           user_uc->uc_mcontext.gregs[REG_RSP],
-          user_uc->uc_mcontext.gregs[REG_RIP]);
+          user_uc->uc_mcontext.gregs[REG_RIP],
+          user_uc->uc_mcontext.fpregs);
 
     clear_bit(SHIM_FLAG_SIGPENDING, &tcb->flags);
     while (!handle_next_signal(user_uc)) {
