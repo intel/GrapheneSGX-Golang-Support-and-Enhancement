@@ -806,8 +806,10 @@ static void __setup_sig_frame(
     // uc->uc_flags &= ~UC_FP_XSTATE;
     context->fpregs = NULL;
 
-    debug("deliver signal handler to user stack %p (%d, %p, %p)\n",
-          handler, sig, &signal->info, &signal->context);
+    debug("deliver signal handler to user stack %p (%d, %p, %p) sigframe: %p uc: %p fpstate %p\n",
+          handler, sig, &signal->info, &signal->context,
+          user_sigframe, &user_sigframe->uc,
+          user_sigframe->uc.uc_mcontext.fpregs);
 }
 
 static void get_signal_handler(struct shim_thread * thread, int sig,
