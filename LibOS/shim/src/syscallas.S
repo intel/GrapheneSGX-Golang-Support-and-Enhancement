@@ -202,10 +202,8 @@ __syscallas_signal_allowed_1_end:
         andq $(~15), %rdi
         subq $8, %rdi
 
-        movq %rsp, %r11
         movq %rdi, %rsp
         movq %rax, %rsi
-        pushq %r11
         pushq %rsi # save %rax in case that signal is not delivered
         pushq %rbp
         movq %rsp, %rbp
@@ -214,15 +212,17 @@ __syscallas_signal_allowed_1_end:
         movq %rbp, %rsp
         popq %rbp
         popq %rsi
-        popq %r11
         cmp $0, %rax
         movq %rsi, %rax # %rsi conatins returning %rax saved above
-        je .Lsignal_not_delivered
+        je .Lret_nosignal
+        ## deliver_signal_on_sysret changes shim_tcb->context->regs
+        ## to allocate signal frame. adjust it.
+        ## .Lret_signal expects %rbp has struct shim_regs.
+        ## mov from %rsp is faster than from memory.
+        ## %rsp == TCB_SEGMENT_REG:(SHIM_TCB_OFFSET + TCB_REGS)
+        ## movq TCB_SEGMENT_REG:(SHIM_TCB_OFFSET + TCB_REGS), %rbp
+        movq %rsp, %rbp
         jmp .Lret_signal
-
-.Lsignal_not_delivered:
-        movq %r11, %rsp
-        jmp .Lret_nosignal
 
         .cfi_endproc
         .size syscalldb, .-syscalldb
