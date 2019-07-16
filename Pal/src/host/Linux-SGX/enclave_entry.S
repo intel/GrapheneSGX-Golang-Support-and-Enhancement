@@ -146,12 +146,17 @@ enclave_entry:
 	movl $0, %edi
 	xchgl %edi, SGX_GPR_EXITINFO(%rbx) ## don't carry this info for next resume
 	testl $0x80000000, %edi
+	# this is synchronous event if (valid = 1)
+	# Synchronous event isn't triggered while we're in subtle state.
+	# It's safe to skip those brittle checks.
 	jnz .Lhandle_exception
 
 	movl %esi, %edi
 	# use external event - only the first 8 bits count
 	andl $0xff, %edi
 	cmpl $0, %edi
+	# async event happened.
+	# We may be in subtle state. need to check such cases to avoid them.
 	jne .Lhandle_exception_raise
 
 	# clear the registers
@@ -163,6 +168,7 @@ enclave_entry:
 
 	jmp .Lclear_and_eexit
 
+.Lhandle_exception_raise:
 	## There is a race between host signal delivery and restoring %rsp
 	## in this entry code. We must be careful to setup %rsp.
 	##
@@ -328,7 +334,6 @@ enclave_entry:
 	movq $0, %gs:SGX_OCALL_PREPARED
 4:
 
-.Lhandle_exception_raise:
 	FAIL_LOOP_IF_NOT_READY_FOR_EXCEPTIONS
 
 	SGX_TLS_FLAGS_SET_EXECUTING_BIT %rax
@@ -349,6 +354,11 @@ enclave_entry:
 	jmp .Lhandle_exception__
 
 .Lhandle_exception:
+	## assert if we're not in subtle sitation
+	cmpq $0, %gs:SGX_STACK
+	je 1f
+	FAIL_LOOP
+1:
 	FAIL_LOOP_IF_NOT_READY_FOR_EXCEPTIONS
 
 	SGX_TLS_FLAGS_SET_EXECUTING_BIT %rax
