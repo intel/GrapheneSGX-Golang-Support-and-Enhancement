@@ -215,7 +215,7 @@ static void _DkTerminateSighandler (int signum, siginfo_t * info,
                 "rip 0x%08lx signum %d event %d tid %ld\n",
                 rip, signum, get_event_num(signum), INLINE_SYSCALL(gettid, 0));
         uc->uc_mcontext.gregs[REG_RIP] = (uint64_t) sgx_entry_return;
-        uc->uc_mcontext.gregs[REG_RDI] = -PAL_ERROR_INTERRUPTED;
+        uc->uc_mcontext.gregs[REG_RDI] = -EINTR;
         uc->uc_mcontext.gregs[REG_RSI] = get_event_num(signum);
     } else {
         SGX_DBG(DBG_E, "sgx_raise signum %d event %d\n",
