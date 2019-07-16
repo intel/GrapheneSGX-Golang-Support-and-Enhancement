@@ -35,6 +35,7 @@
 #include <sigset.h>
 #include <linux/signal.h>
 #include <ucontext.h>
+#include <asm/errno.h>
 
 #include "go-type.h"
 
@@ -617,18 +618,20 @@ void _DkHandleExternalEvent (PAL_NUM event, sgx_context_t * uc,
     ctx.cr2 = 0;
 
     if (event != 0) {
-        assert(uc->rax == (unsigned long)-PAL_ERROR_INTERRUPTED);
+        unsigned long rax = uc->rax;
         set_bit(SGX_TLS_FLAGS_EVENT_EXECUTING_BIT, &get_enclave_tls()->flags);
         struct ocall_marker_buf * marker = ocall_marker_clear();
         ocall_marker_check(uc, marker);
         SGX_DBG(DBG_E,
                 "event %ld uc %p rsp 0x%08lx &rsp: %p rip +0x%08lx"
-                " xregs_state %p event_nest %ld flags 0x%lx async 0x%lx marker %p\n",
+                " xregs_state %p event_nest %ld flags 0x%lx async 0x%lx marker %p rax 0x%lx\n",
                 event, uc, uc->rsp, &uc->rsp,
                 uc->rip - (uintptr_t)TEXT_START,
                 xregs_state, nest,
                 GET_ENCLAVE_TLS(flags),
-                GET_ENCLAVE_TLS(pending_async_event), marker);
+                GET_ENCLAVE_TLS(pending_async_event), marker, rax);
+        assert(!INTERNAL_SYSCALL_ERROR_P(rax) ||
+               rax == -(unsigned long)EINTR);
         if (marker)
             SGX_DBG(DBG_E,
                     "marker: rip +0x%08lx rsp 0x%08lx\n",
