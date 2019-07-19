@@ -21,9 +21,9 @@
 #define ODEBUG_RV(code, rv) do { } while (0)
 #else
 #define ODEBUG(code, ms)                        \
-    SGX_DBG(DBG_E, #code " call ms: %p\n", ms)
+    SGX_DBG(DBG_O, #code " call ms: %p\n", ms)
 #define ODEBUG_RV(code, rv)                     \
-    SGX_DBG(DBG_E, #code " ret rv: %d\n", (rv))
+    SGX_DBG(DBG_O, #code " ret rv: %d\n", (rv))
 #endif
 
 static int sgx_ocall_exit(void* prv)
@@ -286,7 +286,7 @@ static int sgx_ocall_futex(void * pms)
         ts->tv_sec = ms->ms_timeout / 1000000;
         ts->tv_nsec = (ms->ms_timeout - ts->tv_sec * 1000000) * 1000;
     }
-    SGX_DBG(DBG_E, "futex %p op %d val %d timeout %ld\n",
+    SGX_DBG(DBG_O, "futex %p op %d val %d timeout %ld\n",
             ms->ms_futex, ms->ms_op, ms->ms_val, ms->ms_timeout);
     ret = INLINE_SYSCALL(futex, 6, ms->ms_futex, ms->ms_op, ms->ms_val,
                          ts, NULL, 0);
@@ -643,7 +643,7 @@ static int sgx_ocall_sleep(void * pms)
     ms_ocall_sleep_t * ms = (ms_ocall_sleep_t *) pms;
     int ret;
     ODEBUG(OCALL_SLEEP, ms);
-    SGX_DBG(DBG_E, "sgx_ocall_sleep %ld\n", ms->ms_microsec);
+    SGX_DBG(DBG_O, "sgx_ocall_sleep %ld\n", ms->ms_microsec);
     if (!ms->ms_microsec) {
         INLINE_SYSCALL(sched_yield, 0);
         ODEBUG_RV(OCALL_SLEEP, 0);
