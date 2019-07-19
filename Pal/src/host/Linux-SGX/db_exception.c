@@ -90,7 +90,7 @@ static void _DkGenericEventTrigger (PAL_IDX event_num, PAL_EVENT_HANDLER upcall,
         .retry_event = retry_event,
     };
 
-    SGX_DBG(DBG_E,
+    SGX_DBG(DBG_D,
             "event %d context %p uc %p xregs_state %p retry %d\n"
             "\tnest %ld flags 0x%lx async 0x%lx\n"
             "\tuc: rip +0x%08lx rsp 0x%08lx\n"
@@ -101,7 +101,7 @@ static void _DkGenericEventTrigger (PAL_IDX event_num, PAL_EVENT_HANDLER upcall,
             uc->rip - (uintptr_t) TEXT_START, uc->rsp,
             ctx->rip - (uintptr_t) TEXT_START, ctx->rsp);
     (*upcall) ((PAL_PTR) &event, arg, ctx);
-    SGX_DBG(DBG_E, "_DkGenericEventTriger done\n");
+    SGX_DBG(DBG_D, "_DkGenericEventTriger done\n");
 }
 
 static bool
@@ -140,7 +140,7 @@ static void restore_sgx_context (sgx_context_t * uc,
     assert((PAL_XREGS_STATE*) (uc + 1) == xregs_state);
 
     if ((uintptr_t)uc < 1024) {
-        SGX_DBG(DBG_E,
+        SGX_DBG(DBG_D,
                 "uc %p xregs_state %p retry %d\n"
                 "\tnest %ld flags 0x%lx async 0x%lx\n",
                 uc, xregs_state, retry_event,
@@ -163,7 +163,7 @@ static void restore_pal_context (
 
 #if 0
     if (retry_event)
-        SGX_DBG(DBG_E,
+        SGX_DBG(DBG_D,
                 "uc %p xregs_state %p rsp 0x%08lx rip 0x%08lx rip +0x%08lx\n"
                 "\tctx: rsp 0x%08lx rip 0x%08lx rip +0x%08lx\n"
                 "\tretry %d event_nest %ld flags 0x%lx async 0x%lx marker %p\n",
@@ -256,7 +256,7 @@ static bool ocall_marker_check(sgx_context_t * uc,
         return false;
 
 #if 0
-    SGX_DBG(DBG_E,
+    SGX_DBG(DBG_D,
             "uc: rip 0x%08lx +0x%08lx rsp 0x%08lx\n"
             "\tmarker: rip 0x%08lx +0x%08lx rsp 0x%08lx\n",
             uc->rip, uc->rip - (uintptr_t) TEXT_START, uc->rsp,
@@ -283,7 +283,7 @@ static void _DkExceptionHandlerLoop (PAL_CONTEXT * ctx, sgx_context_t * uc,
     int count = 0;
     //bool retry_event = (nest == 1);
     if (nest > 0)
-        SGX_DBG(DBG_E,
+        SGX_DBG(DBG_D,
                 "ctx %p uc %p xresg %p nest: %ld flags 0x%lx async 0x%lx marker %p\n",
                 ctx, uc, xregs_state, nest,
                 GET_ENCLAVE_TLS(flags), GET_ENCLAVE_TLS(pending_async_event),
@@ -306,7 +306,7 @@ static void _DkExceptionHandlerLoop (PAL_CONTEXT * ctx, sgx_context_t * uc,
                 ctx->rip = uc->rip;
                 ctx->rsp = uc->rsp;
             }
-            SGX_DBG(DBG_E, "event_num %d nest %ld flags 0x%lx async 0x%lx marker %p\n",
+            SGX_DBG(DBG_D, "event_num %d nest %ld flags 0x%lx async 0x%lx marker %p\n",
                     event_num, nest,
                     GET_ENCLAVE_TLS(flags), GET_ENCLAVE_TLS(pending_async_event),
                     marker);
@@ -324,7 +324,7 @@ static void _DkExceptionHandlerLoop (PAL_CONTEXT * ctx, sgx_context_t * uc,
     } while (test_and_clear_bit(SGX_TLS_FLAGS_ASYNC_EVENT_PENDING_BIT,
                                 &tls->flags));
     if (nest > 0)
-        SGX_DBG(DBG_E, "Loop exiting count %d\n", count);
+        SGX_DBG(DBG_D, "Loop exiting count %d\n", count);
 }
 
 void _DkExceptionHandlerMore (sgx_context_t * uc)
@@ -332,7 +332,7 @@ void _DkExceptionHandlerMore (sgx_context_t * uc)
     atomic_inc(get_event_nest());
 
     PAL_XREGS_STATE * xregs_state = (PAL_XREGS_STATE *)(uc + 1);
-    SGX_DBG(DBG_E, "uc %p xregs_state %p nest %ld flasg 0x%lx async 0x%lx marker %p\n",
+    SGX_DBG(DBG_D, "uc %p xregs_state %p nest %ld flasg 0x%lx async 0x%lx marker %p\n",
             uc, xregs_state, atomic_read(get_event_nest()),
             GET_ENCLAVE_TLS(flags), GET_ENCLAVE_TLS(pending_async_event),
             GET_ENCLAVE_TLS(ocall_marker));
@@ -391,7 +391,7 @@ static bool handle_ud(sgx_context_t * uc)
         /* syscall: LibOS may know how to handle this */
         return false;
     }
-    SGX_DBG(DBG_E, "Unknown or illegal instruction at RIP 0x%016lx %s\n",
+    SGX_DBG(DBG_D, "Unknown or illegal instruction at RIP 0x%016lx %s\n",
             uc->rip,
             alloca_bytes2hexdump(instr, 32 /* at least 2 instructions */));
     return false;
@@ -404,7 +404,7 @@ void _DkExceptionHandler (unsigned int exit_info, sgx_context_t * uc)
 
     PAL_XREGS_STATE * xregs_state = (PAL_XREGS_STATE *)(uc + 1);
     struct ocall_marker_buf * marker = ocall_marker_clear();
-    SGX_DBG(DBG_E,
+    SGX_DBG(DBG_D,
             "uc %p xregs_state %p nest %ld flags 0x%lx async 0x%lx marker %p\n"
             "\trip 0x%08lx +0x%08lx rsp 0x%08lx &nest: %p\n",
             uc, xregs_state, nest,
@@ -412,7 +412,7 @@ void _DkExceptionHandler (unsigned int exit_info, sgx_context_t * uc)
             uc->rip, uc->rip - (uintptr_t) TEXT_START, uc->rsp,
             &nest);
     if (marker)
-        SGX_DBG(DBG_E,
+        SGX_DBG(DBG_D,
                 "marker: rip 0x%08lx +0x%08lx rsp 0x%08lx\n",
                 marker->rip, marker->rip - (uintptr_t) TEXT_START, marker->rsp);
     assert((((uintptr_t)xregs_state) % PAL_XSTATE_ALIGN) == 0);
@@ -421,16 +421,16 @@ void _DkExceptionHandler (unsigned int exit_info, sgx_context_t * uc)
     i++;
     struct go_g *g = get_g();
     if (g && i > 100)
-        SGX_DBG(DBG_E,
+        SGX_DBG(DBG_D,
                 "g: lo 0x%08lx hi 0x%08lx guard0 0x%08lx guard1 0x%08lx\n",
                 g->stack.lo, g->stack.hi, g->stackguard0, g->stackguard1);
 
-    SGX_DBG(DBG_E, "exit_info 0x%08x\n", exit_info);
+    SGX_DBG(DBG_D, "exit_info 0x%08x\n", exit_info);
     union {
         sgx_arch_exitinfo_t info;
         unsigned int intval;
     } ei = { .intval = exit_info };
-    SGX_DBG(DBG_E,
+    SGX_DBG(DBG_D,
             "exit_info 0x%08x vector 0x%04x type 0x%04x reserved %x valid %d\n",
             exit_info, ei.info.vector, ei.info.type, ei.info.reserved,
             ei.info.valid);
@@ -506,7 +506,7 @@ void _DkExceptionHandler (unsigned int exit_info, sgx_context_t * uc)
         _DkThreadExit();
     }
 
-    SGX_DBG(DBG_E, "rip 0x%08lx +0x%08lx nest: %ld flags: 0x%lx async: 0x%lx marker %p\n",
+    SGX_DBG(DBG_D, "rip 0x%08lx +0x%08lx nest: %ld flags: 0x%lx async: 0x%lx marker %p\n",
             uc->rip, uc->rip - (uintptr_t)TEXT_START, nest,
             GET_ENCLAVE_TLS(flags), GET_ENCLAVE_TLS(pending_async_event), marker);
     if (nest > 1 &&
@@ -584,7 +584,7 @@ void _DkExceptionReturn (void * event)
         return;
     }
 
-    SGX_DBG(DBG_E,
+    SGX_DBG(DBG_D,
             "uc %p rsp 0x%08lx &rsp %p rip 0x%08lx +0x%08lx xregs_state %p\n"
             "\tctx %p rsp 0x%08lx &rsp %p rip 0x%08lx +0x%08lx\n"
             "\tretry %d nest %ld flags 0x%lx async 0x%lx marker %p\n",
@@ -622,7 +622,7 @@ void _DkHandleExternalEvent (PAL_NUM event, sgx_context_t * uc,
         set_bit(SGX_TLS_FLAGS_EVENT_EXECUTING_BIT, &get_enclave_tls()->flags);
         struct ocall_marker_buf * marker = ocall_marker_clear();
         ocall_marker_check(uc, marker);
-        SGX_DBG(DBG_E,
+        SGX_DBG(DBG_D,
                 "event %ld uc %p rsp 0x%08lx &rsp: %p rip +0x%08lx"
                 " xregs_state %p event_nest %ld flags 0x%lx async 0x%lx marker %p rax 0x%lx\n",
                 event, uc, uc->rsp, &uc->rsp,
@@ -633,7 +633,7 @@ void _DkHandleExternalEvent (PAL_NUM event, sgx_context_t * uc,
         assert(!INTERNAL_SYSCALL_ERROR_P(rax) ||
                rax == -(unsigned long)EINTR);
         if (marker)
-            SGX_DBG(DBG_E,
+            SGX_DBG(DBG_D,
                     "marker: rip +0x%08lx rsp 0x%08lx\n",
                     marker->rip - (uintptr_t) TEXT_START, marker->rsp);
         save_pal_context(&ctx, uc, xregs_state);
