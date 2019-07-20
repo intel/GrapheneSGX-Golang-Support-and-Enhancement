@@ -1,0 +1,231 @@
+#! /usr/bin/env python3
+import os,sys,re
+import subprocess as sp
+
+# Files in Go sources with syscalls:
+# src/syscall/asm_linux_amd64.s
+# src/runtime/sys_linux_amd64.s
+# Compiling a simple test app does not include all of them! XXX
+
+def nodot(text):
+    return text.replace('.','_')
+
+def go_version(gopath):
+    # Option 1: ask Go (requires GOROOT set)
+    #cmd = [gopath, 'version']
+    #out = sp.check_output(cmd, universal_newlines=True).strip()
+    #return out.split(' ')[2]
+
+    # Option 2: use GDB
+    cmd = ['gdb', '--quiet', '-nx', '-batch',
+            '-ex', 'file {}'.format(gopath),
+            '-ex', "p 'runtime.buildVersion'"]
+    out = sp.check_output(cmd, stderr=sp.PIPE, universal_newlines=True)
+    return out.split()[-1].strip('"')
+
+# Obtain ascii hex byte code of a file
+def hd(path):
+    cmd = ['hexdump', '-v', '-e',
+            ' '.join(['1/1', '"0x%x"', '" "']), path]
+    return sp.check_output(cmd, universal_newlines=True)
+
+# Read symbol information - name, address, length
+def read_syms(path):
+    cmd = ['nm', '--print-size', path]
+    out = sp.check_output(cmd, universal_newlines=True)
+    out = out.split('\n')
+    re_symb = re.compile('^[0-9a-f]+ [0-9a-f]+ T')
+    syms = dict()
+    for line in out:
+        if re_symb.match(line):
+            fields = line.split(' ')
+            addr = int(fields[0],base=16)
+            length = int(fields[1],base=16)
+            name = fields[-1]
+            syms[name] = { 'addr': addr, 'len': length }
+    return syms
+
+# Locate functions with syscall using external script
+def find_funcs(path):
+    out = sp.check_output(['./find_funcs', path],
+            universal_newlines=True)
+    return [ x.strip() for x in out.strip().split('\n') ]
+
+# Use GDB to extract bytecode of function
+def extract(path, funcs, syms):
+    cmd = ['gdb', '-quiet', '-nx', '-batch']
+    cmd += ['-ex', 'file ' + path]
+    for func in funcs:
+        cmd += ['-ex']
+        cmd += ['dump memory ' + func + ' '
+                + hex(syms[func]['addr']) + ' '
+                + hex(syms[func]['addr']+syms[func]['len'])]
+    sp.check_output(cmd, stderr=sp.PIPE) # shhh
+
+#def parse_dis_for_call(text, syms):
+
+# Locate call instructions in relevant functions.
+# We do this because these instructions (with immediate operands) will
+# vary across binaries due to the linker's arrangement. We only
+# (later) compare byte code omitting these call instructions.
+def find_call(path, funcs):
+    re_call = re.compile('.*callq\s+0x[0-9a-f]+.*')
+    re_offset = re.compile(r'.*\+([0-9]+).*')
+    cmd = ['gdb', '-quiet', '-nx', '-batch']
+    cmd += ['-ex', 'file ' + path]
+    fncalls = dict() # [fnlabel] -> list of {'off':Offset,'len':Length}
+    for func in funcs:
+        fncalls[func] = []
+        cmd += ['-ex']
+        cmd += ["disassemble/r '{}'".format(func)]
+    out = sp.check_output(cmd, stderr=sp.PIPE,
+            universal_newlines=True).strip()
+    fn = None
+    instr = [] # [ { 'iscall': Bool, 'off': Offset } ]
+    for line in [ x.strip() for x in out.split('\n') ]:
+        if line.startswith('Dump of'):
+            fn = line.split(' ')[-1].rstrip(':')
+            continue
+        elif line.startswith('End of'):
+            # We assume 'call' is never last instruction
+            for (i,ins) in enumerate(instr):
+                if ins['iscall']:
+                    l = instr[i+1]['off'] - ins['off']
+                    fncalls[fn].append( {'off': ins['off'], 'len': l} )
+            instr = []
+            continue
+        if not fn:
+            sys.exit(1)
+        off = line.split()[1]
+        m = re_offset.search(off)
+        if not m:
+            continue
+        if re_call.match(line):
+            instr.append( { 'iscall': True, 'off': int(m[1]) } )
+        else:
+            instr.append( { 'iscall': False, 'off': int(m[1]) } )
+    return fncalls
+
+fnbytes = dict() # [codebytes] -> fnlabel
+fnrefs = dict()  # [fnlabel] -> srcfnlabel
+
+def start_asm(fname):
+    with open(fname, 'a') as f:
+        s = """
+        ########################################################
+        # DO NOT EDIT                                          #
+        #                THIS FILE IS GENERATED                #
+        #                                          DO NOT EDIT #
+        ########################################################
+        .section .data
+        """
+        print(s,file=f)
+
+# Put function bytecode into assembly file for use in C
+def gen_asm(fname, version, funcs):
+    with open(fname, 'a') as f:
+        for func in funcs:
+            symbol = nodot(version) + '__' + nodot(func)
+            s = """.global {}
+                    .type {},@function
+                    {}:
+                    .byte {}"""
+            code = hd(func).strip().replace(' ',',')
+            if code in fnbytes:
+                fnrefs[symbol] = fnbytes[code]
+            else:
+                fnbytes[code] = symbol
+                fnrefs[symbol] = symbol
+                print(s.format(symbol,symbol,symbol,code),file=f)
+
+def gen_c(fname, version, funcs, syms, fncalls):
+    with open(fname,'a') as f:
+        code = """const struct golang GOLANG_{} = {{
+                    .version = "{}",
+                    .nfns = {},
+                    .fns = {{ {} }}
+                  }};"""
+        callfmt = '{{.offset={},.len={} }},'
+        fnsfmt = '{{.name="{}",.bytes=&{},.len={},.ncalls={},.calls={{ {} }} }},'
+        fns = ''
+        for i,func in enumerate(funcs):
+            ncalls = 0
+            calls = ''
+            for call in fncalls[func]:
+                calls += callfmt.format(call['off'],call['len'])
+                ncalls += 1
+            symbol = nodot(version) + '__' + nodot(func)
+            sym = fnrefs[symbol]
+            length = syms[func]['len']
+            fns += fnsfmt.format(func,sym,length,ncalls,calls)
+        v = nodot(version)
+        print(code.format(v,version,len(funcs),fns),file=f)
+
+def start_c(fname):
+    with open(fname,'a') as f:
+        print("""
+        /**************************************************
+         * DO NOT EDIT
+         *             THIS FILE IS GENERATED
+         *                                     DO NOT EDIT
+         **************************************************/""", file=f)
+        print('#include "main.h"', file=f)
+
+def make_h(fname):
+    with open(fname,'a') as f:
+        inclsave = nodot(fname).upper()
+        print('#ifndef __GOLANG_{}__'.format(inclsave), file=f)
+        print('#define __GOLANG_{}__'.format(inclsave), file=f)
+        print('#include <inttypes.h>', file=f)
+        print('#include <unistd.h>', file=f)
+        for symbol in fnbytes.values():
+            print('extern const uint8_t {}[];'.format(symbol), file=f)
+        print('extern const struct golang *GOLANG[];', file=f)
+        print('extern const size_t GOLANG_N;', file=f)
+        print('#endif', file=f)
+
+def finish_c(fname, versions):
+    with open(fname, 'a') as f:
+        code = 'const struct golang *GOLANG[] = {{ {} }};'
+        s = ''
+        for ver in versions:
+            s += '&GOLANG_{},'.format(nodot(ver))
+        print(code.format(s), file=f)
+        print("""const size_t GOLANG_N =
+                 sizeof(GOLANG) / sizeof(*GOLANG);""", file=f)
+
+def main():
+    file_c = 'funcs.c'
+    file_asm = 'bytecode.S'
+    input_paths = 'versions'
+    file_h = 'funcs.h'
+    with open(input_paths,'r') as f:
+        open(file_c, 'w')
+        open(file_asm, 'w')
+        open(file_h, 'w')
+        start_c(file_c)
+        versions = []
+        for go in [ x.strip() for x in f.readlines() ]:
+            if go.startswith('#'):
+                continue
+            ver = go_version(go)
+            print('Working on {}'.format(ver))
+            versions.append(ver)
+            print('\treading symbols')
+            syms = read_syms(go)
+            print('\tlocating syscall functions')
+            funcs = find_funcs(go)
+            print('\textracting function byte code')
+            extract(go, funcs, syms)
+            print('\textracting `call` offsets')
+            fncalls = find_call(go, funcs)
+            print('\tgenerating source files')
+            start_asm(file_asm)
+            gen_asm(file_asm, ver, funcs)
+            gen_c(file_c, ver, funcs, syms,fncalls)
+        print('Finishing')
+        finish_c(file_c, versions)
+        make_h(file_h)
+
+if __name__ == "__main__":
+    main()

@@ -169,7 +169,7 @@ int create_enclave(sgx_arch_secs_t * secs,
     if (baseaddr) {
         secs->baseaddr = (uint64_t) baseaddr & ~(secs->size - 1);
     } else {
-        secs->baseaddr = ENCLAVE_HIGH_ADDRESS;
+        secs->baseaddr = 0; // ENCLAVE_HIGH_ADDRESS;
     }
 
     uint64_t addr = INLINE_SYSCALL(mmap, 6, secs->baseaddr, secs->size,

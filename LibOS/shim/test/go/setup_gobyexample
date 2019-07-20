@@ -1,0 +1,15 @@
+#! /usr/bin/env bash
+set -e; set -u; set -v
+
+SRCDIR="gobyexample"
+BUILDDIR="gobyexample.test"
+
+mkdir -p $BUILDDIR
+[ ! -d $SRCDIR ] && git clone https://github.com/mmcgrana/gobyexample.git $SRCDIR
+pushd $SRCDIR
+    git checkout -b test fe361d879b570cb0ed0303173a078a634d617409
+popd
+find $SRCDIR/examples/ -type f -name "*.go" | xargs cp -t $BUILDDIR
+
+# Use a reliable website to test one example program, not author's.
+sed -i 's/gobyexample.com/example.com/g' $BUILDDIR/http-clients.go

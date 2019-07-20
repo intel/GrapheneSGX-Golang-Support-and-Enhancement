@@ -1,0 +1,9 @@
+#! /usr/bin/env bash
+set -e; set -u
+gopath=$1
+objdump --disassemble --wide $gopath \
+    | egrep --before-context 20 '0f 05\s+syscall' \
+    | egrep '^[0-9a-f]+' \
+    | cut --delimiter ' ' -f2 \
+    | tr --delete '<>:' \
+    | egrep '(runtime|syscall)'

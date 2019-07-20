@@ -1,0 +1,21 @@
+#! /usr/bin/env python3
+# Download all Go compiler versions specified in file 'versions'
+import shutil,os
+import subprocess as sp
+with open('versions', 'r') as f:
+    versions = [ x.strip() for x in f.readlines() ]
+    for v in versions:
+        try:
+            os.stat(v)
+            print('{} exists'.format(v))
+            continue
+        except FileNotFoundError:
+            fname = '{}.linux-amd64.tar.gz'.format(v)
+            url = 'https://dl.google.com/go/{}'.format(fname)
+            print('Fetching {}'.format(v))
+            sp.check_call(['wget', '--quiet', url])
+            print('\tunpacking {}'.format(v))
+            sp.check_call(['tar', 'xzf', fname])
+            cmd = ['cp', 'go/bin/go', v]
+            sp.check_call(cmd)
+            shutil.rmtree('go/')

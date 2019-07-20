@@ -1,0 +1,47 @@
+#! /usr/bin/env python3
+import os,sys,re
+import subprocess as sp
+
+# Pattern is:       xxxxxxxx:   0f 05     syscall
+SYSCALL_DIS_REGEX = '[0-9a-f]+:\s+0f\s+05\s+syscall\s*'
+
+OUTFILE_NAME = 'syscall_offsets.dat'
+
+# Identify starting address of .text section
+def text(objf):
+    cmd = ['readelf', '--section-headers', '--wide', objf]
+    out = sp.check_output(cmd, stderr=sp.PIPE,
+            universal_newlines=True).strip()
+    for line in [ x.strip() for x in out.split('\n') ]:
+        if 'PROGBITS' in line and '.text' in line:
+            return int(line.split()[4],base=16)
+
+# Use GDB or a real disassembler to locate SYSCALL instructions.
+def find_offsets(t,objf):
+    offsets = []
+    re_syscall = re.compile(SYSCALL_DIS_REGEX)
+    cmd = ['objdump', '--disassemble', '--wide',
+            '--disassembler-options', '"intel"', objf]
+    out = sp.check_output(cmd, stderr=sp.PIPE,
+            universal_newlines=True).strip()
+    for line in [ x.strip() for x in out.split('\n') ]:
+        if re_syscall.match(line):
+            offsets.append(int(line.split(':')[0],base=16)-t)
+    return offsets
+
+def dump(offsets,outf):
+    with open(outf,'w') as f:
+        print(' '.join([ str(x) for x in offsets]),file=f)
+
+def main():
+    outf = OUTFILE_NAME
+    if len(sys.argv) != 2:
+        print("Usage: ./find_syscall <objfile>")
+        sys.exit(1)
+    objf = sys.argv[1]
+    t = text(objf)
+    offsets = find_offsets(t,objf)
+    dump(offsets,outf)
+
+if __name__ == "__main__":
+    main()

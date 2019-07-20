@@ -80,17 +80,23 @@ typedef ptrdiff_t ssize_t;
 size_t strnlen (const char *str, size_t maxlen);
 size_t strlen (const char *str);
 
+char * strstr (const char *haystack, const char *needle);
+
 long strtol (const char *s, char **endptr, int base);
 int atoi (const char *nptr);
 long int atol (const char *nptr);
 
 char * strchr (const char *s, int c_in);
 
+int strncmp (const char *s1, const char *s2, size_t n);
+int strcmp (const char *p1, const char *p2);
+
 void * memcpy (void *dstpp, const void *srcpp, size_t len);
 void * memmove (void *dstpp, const void *srcpp, size_t len);
 void * memset (void *dstpp, int c, size_t len);
 int memcmp (const void *s1, const void *s2, size_t len);
 
+/* XXX these functions are NOT exported by PAL */
 /* Libc memory allocation functions. stdlib.h. */
 void *malloc(size_t size);
 void free(void *ptr);
@@ -176,6 +182,9 @@ int get_base_name (const char * path, char * buf, int size);
 /* Loading configs / manifests */
 
 #include <list.h>
+
+/* maximum length of URIs */
+#define URI_MAX                  256
 
 struct config;
 DEFINE_LISTP(config);

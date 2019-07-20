@@ -1,0 +1,243 @@
+#! /usr/bin/env python3
+import os,sys,re,signal,time,threading
+import subprocess as sp
+
+TIMEOUT = 30
+
+#
+# Helper utilities
+#
+
+def update_env(env):
+    env['SGX'] = '1'
+    return env
+
+def update_cmd(cmd):
+    c = ['./pal_loader']
+    c.append(cmd)
+    return c
+
+def make_proc(cmd,env):
+    return sp.Popen(cmd, env=env,
+            stdin=sp.PIPE, stderr=sp.DEVNULL, stdout=sp.PIPE,
+            universal_newlines=True)
+
+#
+# Example-specific handling routines
+#
+
+def handle_goroutines(name,cmd,env):
+    proc = make_proc(cmd,env)
+    time.sleep(1) # wait for prog to expect input
+    proc.communicate('x\n',timeout=TIMEOUT)
+    return proc.returncode
+
+def handle_line_filters(name,cmd,env):
+    text = 'xxxxxxxxxxxxxx abc\n\04' # abc <Enter> <Ctl+d>
+    ret = 0
+    proc = make_proc(cmd,env)
+    # FIXME scan the output for this, since in Graphene, it's full of
+    # garbage debug output now
+    out = proc.communicate(text,timeout=TIMEOUT)[0]
+    if out.strip() != text.upper():
+        ret = 1
+    return ret
+
+def handle_reading_files(name,cmd,env):
+    with open('/tmp/dat','w') as f:
+        f.writelines(['0123456789\n'])
+    proc = make_proc(cmd,env)
+    return proc.wait(timeout=TIMEOUT)
+
+def handle_signals(name,cmd,env):
+    proc = make_proc(cmd,env)
+    time.sleep(1) # wait for prog to install handlers
+    proc.send_signal(signal.SIGINT)
+    return proc.wait(timeout=TIMEOUT)
+
+def handle_panic(name,cmd,env):
+    proc = make_proc(cmd,env)
+    ret = 0
+    if 2 != proc.wait(timeout=TIMEOUT):
+        ret = 1
+    return ret
+
+def handle_exit(name,cmd,env):
+    proc = make_proc(cmd,env)
+    ret = 0
+    if 3 != proc.wait(timeout=TIMEOUT):
+        ret = 1
+    return ret
+
+def handle_command_line_arguments(name,cmd,env):
+    cmd.extend(['one', 'two', 'three', 'four'])
+    proc = make_proc(cmd,env)
+    return proc.wait(timeout=TIMEOUT)
+
+def handle_command_line_subcommands(name,cmd,env):
+    cmd.extend(['foo'])
+    proc = make_proc(cmd,env)
+    return proc.wait(timeout=TIMEOUT)
+
+def wait_for_open_port(n):
+    cmd = ['lsof', '-i']
+    while True:
+        out = sp.check_output(cmd, universal_newlines=True)
+        if ':8090' in out:
+            return
+        print(out)
+        time.sleep(1)
+
+stdout_stop = False
+#stdout_lock = threading.Lock()
+
+def consume(fs):
+    while not stdout_stop:
+        fs.readline()
+    return
+
+# We have to consume the process stdout because otherwise Graphene
+# will choke and hang during execution.
+class ConsumeFd(threading.Thread):
+    def __init__(self,f):
+        super(ConsumeFd,self).__init__()
+        self.stop = threading.Event()
+        self.f = f
+    def stop(self):
+        self.stop.set()
+    def run(self):
+        print('thread started')
+        while not self.stop.is_set():
+            print(self.f.readline().strip())
+        print('thread ending')
+
+def handle_http_servers(name,cmd,env):
+    global stdout_stop
+    ret = 0
+    proc = make_proc(cmd,env)
+    t = threading.Thread(target=consume,args=(proc.stdout,))
+    t.start()
+    wait_for_open_port(8090)
+    stdout_stop = True
+    t.join()
+    out = sp.check_output(['curl', '--silent',
+        '--noproxy', 'localhost', 'localhost:8090/hello'])
+    if out != b'hello\n':
+        ret = 1
+    return ret
+
+def finish(name,cmd,env):
+    proc = make_proc(cmd,env)
+    t = ConsumeFd(proc.stdout)
+    t.start()
+    time.sleep(5)
+    t.stop()
+    return proc.wait(timeout=TIMEOUT)
+
+#
+# Each example program and its handling routine
+#
+
+progs = {
+        # Broken ones?
+        'atomic-counters'                  :  finish,
+        # Seem to pass
+        'arrays'                           :  finish,
+        # These examples we just execute and check return status.
+        'base64-encoding'                  :  finish,
+        'channel-buffering'                :  finish,
+        'channel-directions'               :  finish,
+        'channels'                         :  finish,
+        'channel-synchronization'          :  finish,
+        'closing-channels'                 :  finish,
+        'closures'                         :  finish,
+        'collection-functions'             :  finish,
+        'command-line-flags'               :  finish,
+        'constants'                        :  finish,
+        'defer'                            :  finish,
+        'directories'                      :  finish,
+        'environment-variables'            :  finish,
+        'epoch'                            :  finish,
+        'errors'                           :  finish,
+        'execing-processes'                :  finish,
+        'file-paths'                       :  finish,
+        'for'                              :  finish,
+        'functions'                        :  finish,
+        'hello-world'                      :  finish,
+        'http-clients'                     :  finish,
+        'if-else'                          :  finish,
+        'interfaces'                       :  finish,
+        'json'                             :  finish,
+        'maps'                             :  finish,
+        'methods'                          :  finish,
+        'multiple-return-values'           :  finish,
+        'mutexes'                          :  finish,
+        'non-blocking-channel-operations'  :  finish,
+        'number-parsing'                   :  finish,
+        'pointers'                         :  finish,
+        'random-numbers'                   :  finish,
+        'range'                            :  finish,
+        'range-over-channels'              :  finish,
+        'rate-limiting'                    :  finish,
+        'recursion'                        :  finish,
+        'regular-expressions'              :  finish,
+        'select'                           :  finish,
+        'sha1-hashes'                      :  finish,
+        'slices'                           :  finish,
+        'sorting-by-functions'             :  finish,
+        'sorting'                          :  finish,
+        'spawning-processes'               :  finish,
+        'stateful-goroutines'              :  finish,
+        'string-formatting'                :  finish,
+        'string-functions'                 :  finish,
+        'structs'                          :  finish,
+        'switch'                           :  finish,
+        'temporary-files-and-directories'  :  finish,
+        'tickers'                          :  finish,
+        'time-formatting-parsing'          :  finish,
+        'time'                             :  finish,
+        'timeouts'                         :  finish,
+        'timers'                           :  finish,
+        'url-parsing'                      :  finish,
+        'values'                           :  finish,
+        'variables'                        :  finish,
+        'variadic-functions'               :  finish,
+        'waitgroups'                       :  finish,
+        'worker-pools'                     :  finish,
+        'writing-files'                    :  finish,
+        # Each of these require a special handler
+        'command-line-arguments'           :  handle_command_line_arguments,
+        'command-line-subcommands'         :  handle_command_line_subcommands,
+        'exit'                             :  handle_exit,
+        'goroutines'                       :  handle_goroutines,
+        'http-servers'                     :  handle_http_servers,
+        'line-filters'                     :  handle_line_filters,
+        'panic'                            :  handle_panic,
+        'reading-files'                    :  handle_reading_files,
+        'signals'                          :  handle_signals,
+        }
+
+#
+# Test setup code
+#
+
+def test(name):
+    print(name)
+    cmd = update_cmd(name)
+    env = update_env(os.environ)
+    ret = progs[name](name,cmd,env)
+    if ret != 0:
+        print('Error: {} exited with non-zero status: {}'
+                .format(name,ret))
+        sys.exit(1)
+
+def start():
+    test('base64-encoding')
+    return
+    for i,prog in enumerate(progs):
+        if i >= 20:
+            break
+        test(prog)
+
+if __name__ == "__main__":
+    start()

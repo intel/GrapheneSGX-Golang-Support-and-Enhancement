@@ -1,0 +1,117 @@
+This patch introduces a new LibOS library called libsysz.so which
+dynamically patches SYSCALL instructions to be redirected to the LibOS
+implementation for emulation, avoiding expensive enclave-exit
+handling.
+
+The user provides an input file with offsets into the text section
+where SYSCALL instructions are located; this is added as a trusted
+file to the manifest. This library uses this file to identify SYSCALL
+locations without disassembly at runtime.
+    
+All SYSCALL are replaced with CALL RAX, as both instructions are two
+bytes. The system call ID is in register RAX and is now interpreted as
+an absolute address. Control flow redirects to a NOP instruction slide
+in the first virtual page (0x0000 - 0x0FFF), set up by this library,
+ending in a jump to the trap, where one can implement custom handling
+of the SYSCALL.  Currently, we invoke a wrapper function in the LibOS
+directly.
+
+Advantages:
+
+1. Generic. It is agnostic of language and versioning.
+
+2. Simple. All system calls handled in the same way and without any
+disassembly needed or relocating of nearby instructions.
+
+Disadvantages:
+
+1. Portability. We require write and execute access to the first
+virtual page, and we sequester use of this page exclusively for our
+own purposes.
+
+2. Possible red zone conflict. Compilers are allowed to assign
+function-local variables on the stack without updating RSP, in an area
+of 128 bytes (defined in the ABI) below RSP, called the "red zone".
+SYSCALL does not modify the user stack, but our use of CALL will push
+8 bytes onto the stack (the return address). Golang applications, for
+example, do not exploit the red zone within functions that invoke
+SYSCALL, so this method is safe.
+    
+----------------------------------------------------------------------
+How to Use
+----------------------------------------------------------------------
+
+1. Include building the library provided in LibOS/libs/symtab/ when
+building Graphene-SGX. We depend on it.
+
+2. Compile your application binary.
+
+3. Execute find_syscall to generate the offsets file for your
+application. If the file is empty (no integer values), you do not need
+the patching provided by this library as it does not have any SYSCALL
+instructions.
+
+4. Add the following key to the application manifest:
+
+sgx.trusted_files.syscallz_offsets = file:syscall_offsets.dat
+
+5. Append these libraries to the loader.preload key in the manifest:
+
+file:$(RUNTIME_DIR)/libsymtab.so,file:$(RUNTIME_DIR)/libsysz.so
+
+6. Sign your application (in Graphene, make SGX_RUN=1) and execute.
+
+----------------------------------------------------------------------
+Execution Flow Illustration
+----------------------------------------------------------------------
+
+Replacing all SYSCALL with CALL RAX will redirect control flow to some
+byte-offset within page zero between address 0x0 and NR, because the
+system call ID is now interpreted as an absolute address. Using CALL
+we can preserve the origin location, as it pushes the 8B return
+address onto the stack. The value in all registers used to pass
+arguments to SYSCALL are preserved. Instruction fetches continue down
+the slide to the bounce area at the end, where we jump to the trap
+handler.
+                          addr  instr
+        -->        +-    0x0:    nop
+           -->     |     0x1:    nop
+call rax --> slide |     0x2:    nop
+          -->  |   |     0x3:    nop
+       -->     |   |     ...     ...
+               v   +-     NR:    nop  #  NR = max syscall number
+            bounce |   NR +1:    movabsq rcx,__sysz_trap
+               |   +-  NR+11:    jmpq *%rcx
+               v
+          __sysz_trap in trap.S
+
+The trap handler then removes the return address and places it into
+RCX. The SYSCALL_WRAPPER implementation uses this register to know
+the return address.
+                         within           after
+      at SYSCALL:        slide:        trap handler:
+
+         stack            stack           stack
+        +-----+          +-----+         +-----+
+        | ... |          | ... |         | ... |
+rsp ->  +-----+          | RA  | +8B     +-----+ <- rsp
+                  rsp -> +-----+         RCX = RA
+
+SYSCALL_WRAPPER appropriately emulates a system call based on the
+registers specified in the Linux x8-64 system call ABI. Control is
+returned to the location in RCX via a JMP (i.e., the instruction
+immediately following the original SYSCALL we replaced).
+
+----------------------------------------------------------------------
+Misc Notes
+----------------------------------------------------------------------
+
+The reason for the separate trap function (trap.S) is to avoid having
+too many manually composed assembly instructions in virtual page zero;
+the slide and bounce do not need to be modified later, but trap.S can
+be written directly in sane (correct) assembly instructions to handle
+the SYSCALL.
+
+This library depends on libsymtab solely for determinining the
+location of the .text section within the application; no symbol
+lookups are required.
