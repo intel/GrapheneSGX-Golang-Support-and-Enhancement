@@ -15,6 +15,7 @@
 #include <linux/in6.h>
 #include <asm/errno.h>
 #include <ctype.h>
+#include <getopt.h>
 
 #include <sysdep.h>
 #include <sysdeps/generic/ldsodefs.h>
@@ -855,25 +856,30 @@ static int load_enclave (struct pal_enclave * enclave,
         }
     }
 
-    enclave->exec = INLINE_SYSCALL(open, 3, exec_uri + URI_PREFIX_FILE_LEN,
-                                   O_RDONLY|O_CLOEXEC, 0);
-    if (IS_ERR(enclave->exec)) {
-        if (exec_uri_inferred) {
-            // It is valid for an enclave not to have an executable.
-            // We need to catch the case where we inferred the executable
-            // from the manifest file name, but it doesn't exist, and let
-            // the enclave go a bit further.  Go ahead and warn the user,
-            // though.
-            SGX_DBG(DBG_I, "Inferred executable cannot be opened: %s.  This may be ok, "
-                    "or may represent a manifest misconfiguration. This typically "
-                    "represents advanced usage, and if it is not what you intended, "
-                    "try setting the loader.exec field in the manifest.\n", exec_uri);
-            enclave->exec = -1;
-        } else {
-            SGX_DBG(DBG_E, "Cannot open executable %s\n", exec_uri);
-            return -EINVAL;
-        }
-    }
+    SGX_DBG(DBG_I, "open exec_uri (%s) \n", exec_uri);
+
+
+    /* enclave->exec = INLINE_SYSCALL(open, 3, exec_uri + URI_PREFIX_FILE_LEN, */
+    /*                                O_RDONLY|O_CLOEXEC, 0); */
+    enclave->exec = -1;
+
+    /* if (IS_ERR(enclave->exec)) { */
+    /*     if (exec_uri_inferred) { */
+    /*         // It is valid for an enclave not to have an executable. */
+    /*         // We need to catch the case where we inferred the executable */
+    /*         // from the manifest file name, but it doesn't exist, and let */
+    /*         // the enclave go a bit further.  Go ahead and warn the user, */
+    /*         // though. */
+    /*         SGX_DBG(DBG_I, "Inferred executable cannot be opened: %s.  This may be ok, " */
+    /*                 "or may represent a manifest misconfiguration. This typically " */
+    /*                 "represents advanced usage, and if it is not what you intended, " */
+    /*                 "try setting the loader.exec field in the manifest.\n", exec_uri); */
+    /*         enclave->exec = -1; */
+    /*     } else { */
+    /*         SGX_DBG(DBG_E, "Cannot open executable %s\n", exec_uri); */
+    /*         return -EINVAL; */
+    /*     } */
+    /* } */
 
     if (get_config(enclave->config, "sgx.sigfile", cfgbuf, sizeof(cfgbuf)) < 0) {
         SGX_DBG(DBG_E, "Sigstruct file not found ('sgx.sigfile' must be specified in manifest)\n");
@@ -930,11 +936,12 @@ static int load_enclave (struct pal_enclave * enclave,
 
     memcpy(pal_sec->manifest_name, manifest_uri, strlen(manifest_uri) + 1);
 
-    if (enclave->exec == -1) {
-        memset(pal_sec->exec_name, 0, sizeof(PAL_SEC_STR));
-    } else {
-        memcpy(pal_sec->exec_name, exec_uri, strlen(exec_uri) + 1);
-    }
+    /* if (enclave->exec == -1) { */
+    /*     memset(pal_sec->exec_name, 0, sizeof(PAL_SEC_STR)); */
+    /* } else { */
+    /*     memcpy(pal_sec->exec_name, exec_uri, strlen(exec_uri) + 1); */
+    /* } */
+    memcpy(pal_sec->exec_name, exec_uri, strlen(exec_uri) + 1);
 
     if (!pal_sec->mcast_port) {
         unsigned short mcast_port;
@@ -1006,6 +1013,11 @@ static void __attribute__ ((noinline)) force_linux_to_grow_stack() {
 
 int main (int argc, char ** argv, char ** envp)
 {
+    char * manifest_suffix = ".manifest.sgx";
+    char arg_manifest[URI_MAX];
+    char * arg_manifestbase = "gsgx";
+    char * arg_enclsz = "default";
+    char * arg_exec = NULL;
     char * manifest_uri = NULL;
     char * exec_uri = NULL;
     const char * pal_loader = argv[0];
@@ -1015,10 +1027,52 @@ int main (int argc, char ** argv, char ** envp)
                                     // inferred from the manifest name somewhat
                                     // differently
 
-    force_linux_to_grow_stack();
+    int arg_optind;
+    int opt_ch;
 
-    argc--;
-    argv++;
+    while ((opt_ch = getopt (argc, argv, "f:m:")) != -1)
+        switch (opt_ch){
+        case 'f':
+            arg_manifestbase = optarg;
+            break;
+        case 'm':
+            arg_enclsz = optarg;
+            break;
+        case '?':
+            if (optopt == 'f')
+                printf("Option -%c requires an argument.\n",
+                         optopt);
+            if (optopt == 'm')
+                printf("Option -%c requires an argument.\n",
+                         optopt);
+            else if (isprint (optopt))
+                printf("Unknown option `-%c'.\n",
+                         optopt);
+            else
+                printf("Unknown option character `\\x%x'.\n",
+                         optopt);
+            goto usage;
+        default:
+            goto usage;
+        }
+    arg_optind = optind;
+    arg_exec = argv[arg_optind];
+    if (arg_exec == NULL){
+        printf("Requires to specify an executable to run.\n");
+        goto usage;
+    }
+    size_t msz = strlen(arg_manifestbase), pos = 0;
+    memcpy(arg_manifest, arg_manifestbase, msz);
+    pos += msz; msz = 1;
+    memcpy(arg_manifest + pos, "_", msz);
+    pos += msz; msz = strlen(arg_enclsz);
+    memcpy(arg_manifest + pos, arg_enclsz, msz);
+    pos += msz; msz = strlen(manifest_suffix);
+    memcpy(arg_manifest + pos, manifest_suffix, msz);
+
+    SGX_DBG(DBG_I, "manifest file (%s) adopted\n", arg_manifest);
+
+    force_linux_to_grow_stack();
 
     int is_child = sgx_init_child_process(&pal_enclave.pal_sec);
     if (is_child < 0) {
@@ -1033,10 +1087,10 @@ int main (int argc, char ** argv, char ** envp)
         if (!argc)
             goto usage;
 
-        if (!strcmp_static(argv[0], URI_PREFIX_FILE)) {
-            exec_uri = alloc_concat(argv[0], -1, NULL, -1);
+        if (!strcmp_static(arg_exec, URI_PREFIX_FILE)) {
+            exec_uri = alloc_concat(arg_exec, -1, NULL, -1);
         } else {
-            exec_uri = alloc_concat(URI_PREFIX_FILE, -1, argv[0], -1);
+            exec_uri = alloc_concat(URI_PREFIX_FILE, -1, arg_exec, -1);
         }
     } else {
         exec_uri = alloc_concat(pal_enclave.pal_sec.exec_name, -1, NULL, -1);
@@ -1066,7 +1120,7 @@ int main (int argc, char ** argv, char ** envp)
 
     char manifest_base_name[URI_MAX];
     size_t manifest_base_name_len = sizeof(manifest_base_name);
-    ret = get_base_name(exec_uri + URI_PREFIX_FILE_LEN, manifest_base_name,
+    ret = get_base_name(arg_manifest, manifest_base_name,
                         &manifest_base_name_len);
     if (ret < 0) {
         goto out;
@@ -1136,8 +1190,8 @@ int main (int argc, char ** argv, char ** envp)
      * continuous we know that we are running on Linux, which does this. This
      * saves us creating a copy of all argv and envp strings.
      */
-    char * args = argv[0];
-    size_t args_size = argc > 0 ? (argv[argc - 1] - argv[0]) + strlen(argv[argc - 1]) + 1: 0;
+    char * args = argv[arg_optind];
+    size_t args_size = argc > 0 ? (argv[argc - 1] - args) + strlen(argv[argc - 1]) + 1: 0;
 
     int envc = 0;
     while (envp[envc] != NULL) {
@@ -1164,7 +1218,7 @@ out:
     return ret;
 
 usage:
-    SGX_DBG(DBG_E, "USAGE: %s [executable|manifest] args ...\n", pal_loader);
+    SGX_DBG(DBG_E, "USAGE: %s -f manifest_base -m enclave_size executable args ...\n", pal_loader);
     ret = -EINVAL;
     goto out;
 }
