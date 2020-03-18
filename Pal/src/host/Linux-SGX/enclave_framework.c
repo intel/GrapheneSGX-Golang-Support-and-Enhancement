@@ -18,7 +18,8 @@ void * enclave_base, * enclave_top;
 
 struct pal_enclave_config pal_enclave_config;
 
-static int register_trusted_file(const char* uri, const char* checksum_str, bool check_duplicates);
+static int register_trusted_file (const char * key, const char * uri,
+                                  const char * checksum_str, bool check_duplicates);
 
 bool sgx_is_completely_within_enclave (const void * addr, uint64_t size)
 {
@@ -232,6 +233,8 @@ DEFINE_LIST(trusted_file);
 struct trusted_file {
     LIST_TYPE(trusted_file) list;
     uint64_t size;
+    size_t key_len;
+    char key[URI_MAX];
     size_t uri_len;
     char uri[URI_MAX];
     bool allowed;
@@ -244,6 +247,7 @@ static LISTP_TYPE(trusted_file) trusted_file_list = LISTP_INIT;
 static spinlock_t trusted_file_lock = INIT_SPINLOCK_UNLOCKED;
 static bool allow_file_creation = 0;
 static int file_check_policy = FILE_CHECK_POLICY_STRICT;
+static char * platform_cert = NULL;
 
 /* Assumes `path` is normalized */
 static bool path_is_equal_or_subpath(const struct trusted_file* tf,
@@ -268,6 +272,337 @@ static bool path_is_equal_or_subpath(const struct trusted_file* tf,
     return false;
 }
 
+int parse_sig_x509(uint8_t* cert, size_t cert_len, uint8_t** body, size_t* body_len,
+                      uint8_t** sig, size_t* sig_len, LIB_RSA_KEY* pubkey) {
+    uint8_t* ptr = cert;
+    uint8_t* end = cert + cert_len;
+    enum asn1_tag tag;
+    bool is_cons;
+    uint8_t* buf;
+    size_t buf_len;
+    int ret;
+
+    // X509Certificate := SEQUENCE {
+    //     Body CertificateBody,
+    //     SignatureAlgorithm AlgorithmDescriptor,
+    //     Signature BIT STRING }
+
+    ret = lib_ASN1GetSerial(&ptr, end, &tag, &is_cons, &buf, &buf_len);
+    if (ret < 0)
+        return ret;
+    if (tag != ASN1_SEQUENCE || !is_cons)
+        return -PAL_ERROR_INVAL;
+
+    uint8_t* cert_signed = ptr = buf;
+    uint8_t* cert_body;
+    uint8_t* cert_sig;
+    size_t cert_body_len, cert_sig_len;
+    end = buf + buf_len;
+
+    ret = lib_ASN1GetSerial(&ptr, end, &tag, &is_cons, &cert_body, &cert_body_len);
+    if (ret < 0)
+        return ret;
+    if (tag != ASN1_SEQUENCE || !is_cons)
+        return -PAL_ERROR_INVAL;
+
+    size_t cert_signed_len = ptr - cert_signed;
+
+    // Skip SignatureAlgorithm
+    ret = lib_ASN1GetSerial(&ptr, end, &tag, &is_cons, &buf, &buf_len);
+    if (ret < 0)
+        return ret;
+
+    ret = lib_ASN1GetBitstring(&ptr, end, &cert_sig, &cert_sig_len);
+    if (ret < 0)
+        return ret;
+
+    // CertficateBody := SEQUENCE {
+    //     Version CONSTANT,
+    //     SerialNumber INTEGER,
+    //     Signature AlgorithmDiscriptor,
+    //     Issuer Name,
+    //     Validity ValidityTime,
+    //     Subject Name,
+    //     SubjectPublicKeyInfo PublicKeyInfo,
+    //     (optional fields) }
+
+    ptr = cert_body;
+    end = cert_body + cert_body_len;
+
+    // Skip Version, SerialNumber, Signature, Issuer, Validity, and Subject
+    for (int i = 0; i < 6; i++) {
+        ret = lib_ASN1GetSerial(&ptr, end, &tag, &is_cons, &buf, &buf_len);
+        if (ret < 0)
+            return ret;
+    }
+
+    // Get SubjectPublicKeyInfo
+    ret = lib_ASN1GetSerial(&ptr, end, &tag, &is_cons, &buf, &buf_len);
+    if (ret < 0)
+        return ret;
+    if (tag != ASN1_SEQUENCE || !is_cons)
+        return -PAL_ERROR_INVAL;
+
+    // PublickKeyInfo := SEQUENCE {
+    //     PublicKeyAlgorithm AlgorithmDescriptor,
+    //     PublicKey BIT STRING }
+
+    ptr = buf;
+    end = buf + buf_len;
+
+    // Skip PublicKeyAlgorithm
+    ret = lib_ASN1GetSerial(&ptr, end, &tag, &is_cons, &buf, &buf_len);
+    if (ret < 0)
+        return ret;
+
+    // Get PublicKey
+    uint8_t* pkey_bits;
+    size_t pkey_bits_len;
+
+    ret = lib_ASN1GetBitstring(&ptr, end, &pkey_bits, &pkey_bits_len);
+    if (ret < 0)
+        return ret;
+
+    // RSAPublicKey := SEQUENCE {
+    //    Modulus Integer,
+    //    PublicExponent Integer }
+
+    ptr = pkey_bits;
+    end = pkey_bits + pkey_bits_len;
+
+    ret = lib_ASN1GetSerial(&ptr, end, &tag, &is_cons, &buf, &buf_len);
+    if (ret < 0)
+        return ret;
+
+    uint8_t* mod;
+    uint8_t* exp;
+    size_t mod_len, exp_len;
+    ptr = buf;
+    end = buf + buf_len;
+
+    ret = lib_ASN1GetLargeNumberLength(&ptr, end, &mod_len);
+    if (ret < 0)
+        return ret;
+
+    mod = ptr;
+    ptr += mod_len;
+
+    ret = lib_ASN1GetLargeNumberLength(&ptr, end, &exp_len);
+    if (ret < 0)
+        return ret;
+
+    exp = ptr;
+    ptr += exp_len;
+
+    *body     = malloc(cert_signed_len);
+    *body_len = cert_signed_len;
+    memcpy(*body, cert_signed, cert_signed_len);
+
+    *sig     = malloc(cert_sig_len);
+    *sig_len = cert_sig_len;
+    memcpy(*sig, cert_sig, cert_sig_len);
+
+    ret = lib_RSAInitKey(pubkey);
+    if (ret < 0)
+        return ret;
+
+    ret = lib_RSAImportPublicKey(pubkey, exp, exp_len, mod, mod_len);
+    if (ret < 0)
+        return ret;
+
+    return 0;
+}
+
+
+int parse_sig_x509_pem(char* cert, char** cert_end, uint8_t** body, size_t* body_len,
+                          uint8_t** sig, size_t* sig_len, LIB_RSA_KEY* pubkey) {
+    int ret;
+    char* start = strchr(cert, '-');
+    if (!start) {
+        // No more certificate
+        *cert_end = NULL;
+        return 0;
+    }
+
+    if (!strstartswith_static(start, "-----BEGIN CERTIFICATE-----"))
+        return -PAL_ERROR_INVAL;
+
+    start += static_strlen("-----BEGIN CERTIFICATE-----");
+    char* end = strchr(start, '-');
+
+    if (end == NULL || !strstartswith_static(end, "-----END CERTIFICATE-----"))
+        return -PAL_ERROR_INVAL;
+
+    size_t cert_der_len = 0;
+    ret = lib_Base64Decode(start, end - start, NULL, &cert_der_len);
+    if (ret < 0)
+        return ret;
+
+    uint8_t* cert_der = __alloca(cert_der_len);
+    ret = lib_Base64Decode(start, end - start, cert_der, &cert_der_len);
+    if (ret < 0)
+        return ret;
+
+    ret = parse_sig_x509(cert_der, cert_der_len, body, body_len, sig, sig_len, pubkey);
+    if (ret < 0)
+        return ret;
+
+    *cert_end = end + static_strlen("-----END CERTIFICATE-----");
+    return 0;
+}
+
+int calc_file_hash(PAL_HANDLE file, size_t size, sgx_checksum_t *hash)
+{
+    int ret = 0;
+    int fd = file->file.fd;
+    size_t fsz = size;
+    LIB_SHA256_CONTEXT sha;
+
+    ret = lib_SHA256Init(&sha);
+    if (ret < 0) {
+        SGX_DBG(DBG_E, "Init SHA256 lib failed: %d\n", ret);
+        goto failed;
+    }
+
+#define FILE_CHUNK_SIZE 1024UL
+
+    uint8_t chunk[FILE_CHUNK_SIZE]; /* Buffer for hashing */
+    size_t chunk_offset = 0;
+    size_t chunk_size = 0;
+
+
+    while(chunk_offset < fsz) {
+
+        chunk_size = MIN(fsz - chunk_offset, FILE_CHUNK_SIZE);
+
+        ret = ocall_pread(fd, chunk, chunk_size, chunk_offset);
+        if (IS_ERR(ret)) {
+            ret = unix_to_pal_error(ERRNO(ret));
+            SGX_DBG(DBG_E, "Read file failed : %d\n", ret);
+            goto failed;
+        }
+
+        chunk_offset += chunk_size;
+
+
+        /* Update the file checksum */
+        ret = lib_SHA256Update(&sha, chunk, chunk_size);
+        if (ret < 0) {
+            SGX_DBG(DBG_E, "Update SHA256 failed: %d\n", ret);
+            goto failed;
+        }
+    }
+
+
+    /* Finalize and checking if the checksum of the whole file matches
+     * with record given in the manifest. */
+
+    ret = lib_SHA256Final(&sha, (uint8_t *) hash->bytes);
+    if (ret < 0) {
+        SGX_DBG(DBG_E, "Finalize SHA256 failed : %d\n", ret);
+        goto failed;
+    }
+failed:
+    return ret;
+}
+
+int check_signature_file(PAL_HANDLE file)
+{
+    const char * sigsuffix = ".sig";
+    int ret = -PAL_ERROR_DENIED;
+    int sigfd;
+    char uri[URI_MAX];
+    char siguri[URI_MAX];
+    char sigpath[URI_MAX];
+    size_t sigsz, fsz;
+    void *sigbuf = NULL;
+
+    ret = _DkStreamGetName(file, uri, URI_MAX);
+    if (ret < 0) {
+        goto out;
+    }
+
+    size_t urisz = strlen(uri);
+    memcpy(siguri, uri, urisz + 1);
+    memcpy(siguri + urisz, sigsuffix, strlen(sigsuffix) + 1);
+
+    PAL_STREAM_ATTR attr;
+    ret = _DkStreamAttributesQuery(uri, &attr);
+    if (!ret)
+        fsz = attr.pending_size;
+    else
+        goto out;
+
+    sgx_checksum_t hash;
+    ret = calc_file_hash(file, fsz, &hash);
+    if (ret < 0) {
+        goto out;
+    }
+
+    ret = _DkStreamAttributesQuery(siguri, &attr);
+    if (!ret)
+        sigsz = attr.pending_size;
+    else
+        goto out;
+
+    size_t fpathsz = strlen(file->file.realpath);
+    memcpy(sigpath, file->file.realpath, fpathsz);
+    memcpy(sigpath + fpathsz, sigsuffix, strlen(sigsuffix) + 1);
+    sigfd = ocall_open(sigpath, O_RDONLY, 0);
+    if (IS_ERR(sigfd)) {
+        ret = unix_to_pal_error(ERRNO(sigfd));
+        SGX_DBG(DBG_E, "Open sigfile failed: %s, %d\n", siguri, sigfd);
+        goto out;
+    }
+
+    sigbuf = malloc(sigsz);
+    if (!sigbuf) {
+        ret = -PAL_ERROR_NOMEM;
+        goto out;
+    }
+
+    int readsz = ocall_read(sigfd, sigbuf, sigsz);
+    if (IS_ERR(readsz)) {
+        ret = unix_to_pal_error(ERRNO(readsz));
+        SGX_DBG(DBG_E, "Read sigfile failed: %d\n", ret);
+        goto out;
+    }
+
+    if (!platform_cert) {
+        SGX_DBG(DBG_E, "Platform public key certificate wasn't loaded\n");
+        ret = -PAL_ERROR_DENIED;
+        goto out;
+    }
+
+    char * cert_end = NULL;
+    uint8_t* cert_body;
+    uint8_t* cert_sig;
+    size_t   cert_body_len;
+    size_t   cert_sig_len;
+    LIB_RSA_KEY cert_key;
+    ret = parse_sig_x509_pem(platform_cert, &cert_end, &cert_body, &cert_body_len, &cert_sig,
+                         &cert_sig_len, &cert_key);
+    if (ret < 0) {
+        SGX_DBG(DBG_E, "Failed to parse platform certificate, rv = %d\n", ret);
+        ret = -1;
+        goto out;
+    }
+
+    ret = lib_RSAVerifySHA256(&cert_key, (uint8_t *) hash.bytes, sizeof(hash), sigbuf, sigsz);
+    lib_RSAFreeKey(&cert_key);
+    if (ret < 0) {
+        SGX_DBG(DBG_E,
+                "Failed to verify the sigfile, rv = %d\n",
+                ret);
+        goto out;
+    }
+
+out:
+    if (sigbuf)
+        free(sigbuf);
+    return ret;
+}
+
 /*
  * 'load_trusted_file' checks if the file to be opened is trusted
  * or allowed for unauthenticated access, according to the manifest.
@@ -276,11 +611,12 @@ static bool path_is_equal_or_subpath(const struct trusted_file* tf,
  * stubptr:  buffer for catching matched file stub.
  * sizeptr:  size pointer
  * create:   this file is newly created or not
+ * strict:   enforce strict policy on this specific file
  *
  * Returns 0 if succeeded, or an error code otherwise.
  */
 int load_trusted_file (PAL_HANDLE file, sgx_stub_t ** stubptr,
-                       uint64_t * sizeptr, int create, void** umem)
+                       uint64_t * sizeptr, int create, void** umem, bool strict)
 {
     *stubptr = NULL;
     *sizeptr = 0;
@@ -302,7 +638,9 @@ int load_trusted_file (PAL_HANDLE file, sgx_stub_t ** stubptr,
     /* Allow to create the file when allow_file_creation is turned on;
        The created file is added to allowed_file list for later access */
     if (create && allow_file_creation) {
-       register_trusted_file(uri, NULL, /*check_duplicates=*/true);
+        register_trusted_file(NULL, uri, NULL, /*check_duplicates=*/true);
+       *stubptr = NULL;
+       *sizeptr = 0;
        return 0;
     }
 
@@ -346,11 +684,23 @@ int load_trusted_file (PAL_HANDLE file, sgx_stub_t ** stubptr,
 
     if (!tf || tf->allowed) {
         if (!tf) {
-            if (get_file_check_policy() != FILE_CHECK_POLICY_ALLOW_ALL_BUT_LOG)
+            switch (get_file_check_policy()) {
+            case FILE_CHECK_POLICY_ALLOW_ALL_BUT_LOG:
+                pal_printf("Allowing access to an unknown file due to "
+                           "file_check_policy settings: %s\n", uri);
+                break;
+            case FILE_CHECK_POLICY_ALLOW_SIGNATURE:
+                if (!strict) {
+                    ret = check_signature_file(file);
+                    if (ret < 0)
+                        return -PAL_ERROR_DENIED;
+                 } else {
+                    return -PAL_ERROR_DENIED;
+                }
+                break;
+            case FILE_CHECK_POLICY_STRICT:
                 return -PAL_ERROR_DENIED;
-
-            pal_printf("Allowing access to an unknown file due to "
-                       "file_check_policy settings: %s\n", uri);
+            }
         }
 
         *stubptr = NULL;
@@ -477,6 +827,16 @@ failed:
         assert(*sizeptr > 0);
         ocall_munmap_untrusted(*umem, *sizeptr);
     }
+#if PRINT_ENCLAVE_STAT
+    if (!ret) {
+        sgx_stub_t * loaded_stub;
+        uint64_t loaded_size;
+        PAL_HANDLE handle = NULL;
+        if (!_DkStreamOpen(&handle, normpath, PAL_ACCESS_RDONLY, 0, 0, 0))
+            load_trusted_file (handle, &loaded_stub, &loaded_size, false);
+    }
+#endif
+
     free(stubs);
 
     return ret;
@@ -631,9 +991,12 @@ failed:
     return -PAL_ERROR_DENIED;
 }
 
-static int register_trusted_file(const char* uri, const char* checksum_str, bool check_duplicates) {
+static int register_trusted_file (const char * key, const char * uri,
+                                  const char * checksum_str, bool check_duplicates)
+{
     struct trusted_file * tf = NULL, * new;
     size_t uri_len = strlen(uri);
+    size_t key_len = strlen(key);
     int ret;
 
     if (check_duplicates) {
@@ -655,6 +1018,8 @@ static int register_trusted_file(const char* uri, const char* checksum_str, bool
         return -PAL_ERROR_NOMEM;
 
     INIT_LIST_HEAD(new, list);
+    new->key_len = key_len;
+    memcpy(new->key, key, key_len + 1);
     new->uri_len = uri_len;
     memcpy(new->uri, uri, uri_len + 1);
     new->size = 0;
@@ -763,7 +1128,7 @@ static int init_trusted_file (const char * key, const char * uri)
         return ret;
     }
 
-    return register_trusted_file(normpath, checksum, /*check_duplicates=*/false);
+    return register_trusted_file(key, normpath, checksum, /*check_duplicates=*/false);
 }
 
 int init_trusted_files (void) {
@@ -895,7 +1260,7 @@ no_trusted:
             goto out;
         }
 
-        register_trusted_file(norm_path, NULL, /*check_duplicates=*/false);
+        register_trusted_file(key, norm_path, NULL, /*check_duplicates=*/false);
     }
 
 no_allowed:
@@ -961,6 +1326,8 @@ int init_file_check_policy (void)
     if (ret > 0) {
         if (!strcmp_static(cfgbuf, "strict"))
             set_file_check_policy(FILE_CHECK_POLICY_STRICT);
+        else if (!strcmp_static(cfgbuf, "allow_signature"))
+            set_file_check_policy(FILE_CHECK_POLICY_ALLOW_SIGNATURE);
         else if (!strcmp_static(cfgbuf, "allow_all_but_log"))
             set_file_check_policy(FILE_CHECK_POLICY_ALLOW_ALL_BUT_LOG);
         else
@@ -970,6 +1337,52 @@ int init_file_check_policy (void)
     }
 
     return 0;
+}
+
+int init_isv_certificate (void)
+{
+    PAL_HANDLE handle = NULL;
+    int ret = 0;
+    const char * pkcert = "isv_certificate";
+    size_t pkcertlen = strlen(pkcert);
+    struct trusted_file * tf = NULL, * tmp;
+
+    LISTP_FOR_EACH_ENTRY(tmp, &trusted_file_list, list) {
+         if (tmp->key_len == pkcertlen && !memcmp(tmp->key, pkcert, pkcertlen + 1)) {
+            tf = tmp;
+            break;
+        }
+    }
+
+    if (tf) {
+        ret = _DkStreamOpen(&handle, tf->uri, PAL_ACCESS_RDONLY, 0, 0, 0);
+        if (ret < 0) {
+            SGX_DBG(DBG_E, "Failed to open ISV public key certificate file: %s\n", tf->uri);
+            _DkRaiseFailure(-ret);
+            ret = PAL_STREAM_ERROR;
+            goto out;
+        }
+
+        platform_cert = malloc(tf->size);
+        if (!platform_cert) {
+            ret = -PAL_ERROR_NOMEM;
+            goto out;
+        }
+
+        ret = _DkStreamRead(handle, 0, tf->size, (void*)platform_cert, NULL, 0);
+        if (ret < 0) {
+            _DkRaiseFailure(-ret);
+            ret = PAL_STREAM_ERROR;
+            goto out;
+        }
+    }
+
+out:
+    if (handle) {
+        _DkObjectClose(handle);
+    }
+
+    return ret;
 }
 
 int init_enclave (void)

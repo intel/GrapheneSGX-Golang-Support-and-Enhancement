@@ -117,19 +117,24 @@ void init_cpuid(void);
  * stubptr:  buffer for catching matched file stub.
  * sizeptr:  size pointer
  * create:   this file is newly created or not
+ * strict:   enforce strict policy on this specific file
  *
  * return:  0 succeed
  */
 
-int load_trusted_file(PAL_HANDLE file, sgx_stub_t** stubptr, uint64_t* sizeptr, int create,
-                      void** umem);
+int load_trusted_file
+    (PAL_HANDLE file, sgx_stub_t ** stubptr, uint64_t * sizeptr, int create,
+     void** umem, bool strict);
 
 enum {
     FILE_CHECK_POLICY_STRICT = 0,
+    FILE_CHECK_POLICY_ALLOW_SIGNATURE,
     FILE_CHECK_POLICY_ALLOW_ALL_BUT_LOG,
 };
 
 int init_file_check_policy (void);
+
+int init_isv_certificate (void);
 
 int get_file_check_policy (void);
 

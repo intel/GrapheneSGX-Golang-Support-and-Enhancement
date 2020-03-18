@@ -41,6 +41,7 @@ crypto_mbedtls_library_objs = \
 	crypto/mbedtls/crypto/library/rsa.o \
 	crypto/mbedtls/crypto/library/rsa_internal.o \
 	crypto/mbedtls/crypto/library/sha256.o \
+	crypto/mbedtls/crypto/library/asn1parse.o \
 	crypto/mbedtls/library/ssl_ciphersuites.o \
 	crypto/mbedtls/library/ssl_cli.o \
 	crypto/mbedtls/library/ssl_msg.o \
