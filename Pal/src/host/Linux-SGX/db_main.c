@@ -413,8 +413,13 @@ void pal_linux_main(char * uptr_args, uint64_t args_size,
         ocall_exit(rv, true);
     }
 
+    if ((rv = init_isv_certificate()) < 0) {
+        SGX_DBG(DBG_E, "Failed to load the ISV pubic key certificate: %d\n", rv);
+        ocall_exit(rv, true);
+    }
+
 #if PRINT_ENCLAVE_STAT == 1
-    printf("                >>>>>>>> "
+    printf(
            "Enclave loading time =      %10ld milliseconds\n",
            _DkSystemTimeQuery() - pal_sec.start_time);
 #endif
