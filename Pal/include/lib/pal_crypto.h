@@ -135,4 +135,34 @@ int lib_SSLHandshake(LIB_SSL_CONTEXT* ssl_ctx);
 int lib_SSLRead(LIB_SSL_CONTEXT* ssl_ctx, uint8_t* buf, size_t buf_size);
 int lib_SSLWrite(LIB_SSL_CONTEXT* ssl_ctx, const uint8_t* buf, size_t buf_size);
 int lib_SSLSave(LIB_SSL_CONTEXT* ssl_ctx, uint8_t* buf, size_t buf_size, size_t* out_size);
+
+#ifdef CRYPTO_USE_MBEDTLS
+#include "mbedtls/asn1.h"
+enum asn1_tag {
+    ASN1_BOOLEAN                = MBEDTLS_ASN1_BOOLEAN,
+    ASN1_INTEGET                = MBEDTLS_ASN1_INTEGER,
+    ASN1_BIT_STRING             = MBEDTLS_ASN1_BIT_STRING,
+    ASN1_OCTET_STRING           = MBEDTLS_ASN1_OCTET_STRING,
+    ASN1_NULL                   = MBEDTLS_ASN1_NULL,
+    ASN1_OID                    = MBEDTLS_ASN1_OID,
+    ASN1_UTF8_STRING            = MBEDTLS_ASN1_UTF8_STRING,
+    ASN1_SEQUENCE               = MBEDTLS_ASN1_SEQUENCE,
+    ASN1_SET                    = MBEDTLS_ASN1_SET,
+    ASN1_PRINTABLE_STRING       = MBEDTLS_ASN1_PRINTABLE_STRING,
+    ASN1_T61_STRING             = MBEDTLS_ASN1_T61_STRING,
+    ASN1_IA5_STRING             = MBEDTLS_ASN1_IA5_STRING,
+    ASN1_UTC_TIME               = MBEDTLS_ASN1_UTC_TIME,
+    ASN1_GENERALIZED_TIME       = MBEDTLS_ASN1_GENERALIZED_TIME,
+    ASN1_UNIVERSAL_STRING       = MBEDTLS_ASN1_UNIVERSAL_STRING,
+    ASN1_BMP_STRING             = MBEDTLS_ASN1_BMP_STRING,
+};
+#endif /* CRYPTO_USE_MBEDTLS */
+
+int lib_ASN1GetSerial(uint8_t** ptr, const uint8_t* end, enum asn1_tag* tag, bool* is_construct,
+                      uint8_t** buf, size_t* len);
+
+int lib_ASN1GetBitstring(uint8_t** ptr, const uint8_t* end, uint8_t** str, size_t* len);
+int lib_ASN1GetLargeNumberLength(uint8_t** ptr, const uint8_t* end, size_t* len);
+
+
 #endif

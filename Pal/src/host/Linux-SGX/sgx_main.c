@@ -846,25 +846,9 @@ static int load_enclave(struct pal_enclave* enclave, int manifest_fd, char* mani
         }
     }
 
-    enclave->exec = INLINE_SYSCALL(open, 3, exec_uri + URI_PREFIX_FILE_LEN,
-                                   O_RDONLY|O_CLOEXEC, 0);
-    if (IS_ERR(enclave->exec)) {
-        if (exec_uri_inferred) {
-            // It is valid for an enclave not to have an executable.
-            // We need to catch the case where we inferred the executable
-            // from the manifest file name, but it doesn't exist, and let
-            // the enclave go a bit further.  Go ahead and warn the user,
-            // though.
-            SGX_DBG(DBG_I, "Inferred executable cannot be opened: %s.  This may be ok, "
-                    "or may represent a manifest misconfiguration. This typically "
-                    "represents advanced usage, and if it is not what you intended, "
-                    "try setting the loader.exec field in the manifest.\n", exec_uri);
-            enclave->exec = -1;
-        } else {
-            SGX_DBG(DBG_E, "Cannot open executable %s\n", exec_uri);
-            return -EINVAL;
-        }
-    }
+    SGX_DBG(DBG_I, "open exec_uri (%s) \n", exec_uri);
+
+    enclave->exec = -1;
 
     if (get_config(enclave->config, "sgx.sigfile", cfgbuf, sizeof(cfgbuf)) < 0) {
         SGX_DBG(DBG_E, "Sigstruct file not found ('sgx.sigfile' must be specified in manifest)\n");
@@ -921,11 +905,7 @@ static int load_enclave(struct pal_enclave* enclave, int manifest_fd, char* mani
 
     memcpy(pal_sec->manifest_name, manifest_uri, strlen(manifest_uri) + 1);
 
-    if (enclave->exec == -1) {
-        memset(pal_sec->exec_name, 0, sizeof(PAL_SEC_STR));
-    } else {
-        memcpy(pal_sec->exec_name, exec_uri, strlen(exec_uri) + 1);
-    }
+    memcpy(pal_sec->exec_name, exec_uri, strlen(exec_uri) + 1);
 
     ret = sgx_signal_setup();
     if (ret < 0)

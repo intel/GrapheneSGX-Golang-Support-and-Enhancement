@@ -109,7 +109,8 @@ static int file_open(PAL_HANDLE* handle, const char* type, const char* uri, int 
         sgx_stub_t* stubs;
         uint64_t total;
         void* umem;
-        ret = load_trusted_file(hdl, &stubs, &total, create, &umem);
+    ret = load_trusted_file(hdl, &stubs, &total, create, &umem, false);
+
         if (ret < 0) {
             SGX_DBG(DBG_E,
                     "Accessing file:%s is denied. (%s) "

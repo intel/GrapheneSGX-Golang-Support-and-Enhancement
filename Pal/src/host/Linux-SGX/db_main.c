@@ -405,6 +405,11 @@ void pal_linux_main(char* uptr_args, uint64_t args_size, char* uptr_env, uint64_
         ocall_exit(rv, true);
     }
 
+    if ((rv = init_isv_certificate()) < 0) {
+        SGX_DBG(DBG_E, "Failed to load the ISV pubic key certificate: %d\n", rv);
+        ocall_exit(rv, true);
+    }
+
 #if PRINT_ENCLAVE_STAT == 1
     uint64_t end_time;
     rv = _DkSystemTimeQuery(&end_time);
