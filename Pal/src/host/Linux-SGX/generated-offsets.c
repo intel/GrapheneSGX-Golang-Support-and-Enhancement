@@ -95,6 +95,7 @@ void dummy(void)
 
     /* struct pal_tcb_urts aka PAL_TCB_URTS */
     OFFSET(PAL_TCB_URTS_TCS, pal_tcb_urts, tcs);
+    OFFSET(PAL_TCB_URTS_JMP, pal_tcb_urts, jmp);
 
     /* sgx_arch_tcs_t */
     OFFSET_T(TCS_FLAGS, sgx_arch_tcs_t, flags);
@@ -152,6 +153,7 @@ void dummy(void)
 
     /* Ecall numbers */
     DEFINE(ECALL_ENCLAVE_START, ECALL_ENCLAVE_START);
+    DEFINE(ECALL_ENCLAVE_RESET, ECALL_ENCLAVE_RESET);
     DEFINE(ECALL_THREAD_START, ECALL_THREAD_START);
     DEFINE(ECALL_THREAD_RESET, ECALL_THREAD_RESET);
 

@@ -2,6 +2,7 @@
 #define __SGX_TLS_H__
 
 #include <pal.h>
+#include <sysdeps/generic/setjmp.h>
 
 /*
  * Beside the classic thread local storage (like ustack, thread, etc.) the TLS
@@ -63,12 +64,20 @@ extern uint64_t dummy_debug_variable;
              "i" (offsetof(struct enclave_tls, member)));           \
     } while (0)
 # else
+typedef enum {
+    JMP_UNSET = 0,
+    JMP_SET,
+} JMP_STATUS_t;
+
 /* private to untrusted Linux PAL, unique to each untrusted thread */
 typedef struct pal_tcb_urts {
     struct pal_tcb_urts* self;
     sgx_arch_tcs_t*     tcs;       /* TCS page of SGX corresponding to thread, for EENTER */
     void*               stack;     /* bottom of stack, for later freeing when thread exits */
     void*               alt_stack; /* bottom of alt stack, for child thread to init alt stack */
+    jmp_buf             jmp;       /* jump buffer store return point */
+    JMP_STATUS_t        jmp_set;   /* flag indicates whether jump or not */
+    int                 exitcode;  /* exit code of app after jump back */
 } PAL_TCB_URTS;
 
 extern void pal_tcb_urts_init(PAL_TCB_URTS* tcb, void* stack, void* alt_stack);

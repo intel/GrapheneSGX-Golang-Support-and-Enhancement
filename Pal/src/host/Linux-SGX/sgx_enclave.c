@@ -13,6 +13,7 @@
 #include <linux/in6.h>
 #include <math.h>
 #include <asm/errno.h>
+#include <sysdeps/generic/setjmp.h>
 
 #ifndef SOL_IPV6
 # define SOL_IPV6 41
@@ -32,8 +33,19 @@ static int sgx_ocall_exit(void* pms)
     }
 
     /* exit the whole process if exit_group() */
-    if (ms->ms_is_exitgroup)
-        INLINE_SYSCALL(exit_group, 1, (int)ms->ms_exitcode);
+    if (ms->ms_is_exitgroup) {
+        ecall_thread_reset();
+        ecall_enclave_reset();
+
+        PAL_TCB_URTS* tcb = get_tcb_urts();
+        if (tcb->jmp_set) {
+            tcb->jmp_set = 0;
+            tcb->exitcode = ms->ms_exitcode;
+            longjmp(tcb->jmp, 1);
+        } else {
+            INLINE_SYSCALL(exit_group, 1, (int)ms->ms_exitcode);
+        }
+    }
 
     /* otherwise call SGX-related thread reset and exit this thread */
     block_async_signals(true);
@@ -667,6 +679,12 @@ int ecall_enclave_start (char * args, size_t args_size, char * env, size_t env_s
     ms.ms_sec_info = &pal_enclave.pal_sec;
     EDEBUG(ECALL_ENCLAVE_START, &ms);
     return sgx_ecall(ECALL_ENCLAVE_START, &ms);
+}
+
+int ecall_enclave_reset(void)
+{
+    EDEBUG(ECALL_ENCLAVE_RESET, NULL);
+    return sgx_ecall(ECALL_ENCLAVE_RESET, NULL);
 }
 
 int ecall_thread_start (void)

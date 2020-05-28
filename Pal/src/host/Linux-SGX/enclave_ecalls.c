@@ -55,6 +55,11 @@ void handle_ecall (long ecall_index, void * ecall_args, void * exit_target,
     SET_ENCLAVE_TLS(ustack,          untrusted_stack);
     SET_ENCLAVE_TLS(clear_child_tid, NULL);
 
+    if (ecall_index == ECALL_ENCLAVE_RESET) {
+        atomic_set(&enclave_start_called, 0);
+        return;
+    }
+
     if (atomic_cmpxchg(&enclave_start_called, 0, 1) == 0) {
         // ENCLAVE_START not yet called, so only valid ecall is ENCLAVE_START.
         if (ecall_index != ECALL_ENCLAVE_START) {

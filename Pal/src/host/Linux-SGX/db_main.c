@@ -79,9 +79,11 @@ PAL_NUM _DkGetHostId (void)
 #include "elf-x86_64.h"
 #include "dynamic_link.h"
 #include <asm/errno.h>
+#include <pal_linux.h>
 
 void setup_pal_map (struct link_map * map);
 static struct link_map pal_map;
+static struct atomic_int pal_has_setup = ATOMIC_INIT(0);
 
 void init_untrusted_slab_mgr(void);
 int init_enclave(void);
@@ -241,13 +243,15 @@ void pal_linux_main(char * uptr_args, uint64_t args_size,
     memset(zero1_start, 0, zero1_end - zero1_start);
     memset(zero2_start, 0, zero2_end - zero2_start);
 
-    /* relocate PAL itself */
-    pal_map.l_addr = elf_machine_load_address();
-    pal_map.l_name = ENCLAVE_PAL_FILENAME;
-    elf_get_dynamic_info((void *) pal_map.l_addr + elf_machine_dynamic(),
-                         pal_map.l_info, pal_map.l_addr);
+    if (atomic_cmpxchg(&pal_has_setup, 0, 1) == 0) {
+        /* relocate PAL itself */
+        pal_map.l_addr = elf_machine_load_address();
+        pal_map.l_name = ENCLAVE_PAL_FILENAME;
+        elf_get_dynamic_info((void *) pal_map.l_addr + elf_machine_dynamic(),
+                            pal_map.l_info, pal_map.l_addr);
 
-    ELF_DYNAMIC_RELOCATE(&pal_map);
+        ELF_DYNAMIC_RELOCATE(&pal_map);
+    }
 
     /*
      * We can't verify the following arguments from the urts. So we copy

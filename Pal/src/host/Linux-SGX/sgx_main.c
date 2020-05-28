@@ -21,10 +21,9 @@
 #include <sysdeps/generic/ldsodefs.h>
 
 size_t g_page_size = PRESET_PAGESIZE;
-
+static int enclave_started = 0;
 struct pal_enclave pal_enclave;
 
-static inline
 char * alloc_concat(const char * p, size_t plen,
                     const char * s, size_t slen)
 {
@@ -78,7 +77,7 @@ static unsigned long parse_int (const char * str)
     return num;
 }
 
-static char * resolve_uri (const char * uri, const char ** errstring)
+char * resolve_uri (const char * uri, const char ** errstring)
 {
     if (!strstartswith_static(uri, URI_PREFIX_FILE)) {
         *errstring = "Invalid URI";
@@ -676,7 +675,7 @@ void getrand (void * buffer, size_t size)
     }
 }
 
-static void create_instance (struct pal_sec * pal_sec)
+void create_instance (struct pal_sec * pal_sec)
 {
     PAL_NUM id;
     getrand(&id, sizeof(id));
@@ -684,7 +683,7 @@ static void create_instance (struct pal_sec * pal_sec)
     pal_sec->instance_id = id;
 }
 
-static int load_manifest (int fd, struct config_store ** config_ptr)
+int load_manifest (int fd, struct config_store ** config_ptr)
 {
     int ret = 0;
 
@@ -736,7 +735,7 @@ out:
  * Returns the number of online CPUs read from /sys/devices/system/cpu/online, -errno on failure.
  * Understands complex formats like "1,3-5,6".
  */
-static int get_cpu_count(void) {
+int get_cpu_count(void) {
     int fd = INLINE_SYSCALL(open, 3, "/sys/devices/system/cpu/online", O_RDONLY|O_CLOEXEC, 0);
     if (fd < 0)
         return unix_to_pal_error(ERRNO(fd));
@@ -780,7 +779,7 @@ static int get_cpu_count(void) {
     return cpu_count;
 }
 
-static int load_enclave (struct pal_enclave * enclave,
+int load_enclave (struct pal_enclave * enclave,
                          int manifest_fd,
                          char * manifest_uri,
                          char * exec_uri,
@@ -915,7 +914,15 @@ static int load_enclave (struct pal_enclave * enclave,
 
     memcpy(pal_sec->manifest_name, manifest_uri, strlen(manifest_uri) + 1);
 
-    memcpy(pal_sec->exec_name, exec_uri, strlen(exec_uri) + 1);
+    if (exec_uri) {
+        size_t len = strlen(exec_uri);
+        if (sizeof(pal_sec->exec_name) < len) {
+            len = sizeof(pal_sec->exec_name);
+        }
+        len -= 1;
+        memcpy(pal_sec->exec_name, exec_uri, len + 1);
+        pal_sec->exec_name[len] = '\0';
+    }
 
     if (!pal_sec->mcast_port) {
         unsigned short mcast_port;
@@ -931,6 +938,11 @@ static int load_enclave (struct pal_enclave * enclave,
             INLINE_SYSCALL(close, 1, pal_sec->mcast_srv);
             pal_sec->mcast_srv = 0;
         }
+    }
+
+    if (!exec_uri) {
+        /* Deferred executable loading */
+        return 0;
     }
 
     ret = sgx_signal_setup();
@@ -956,8 +968,12 @@ static int load_enclave (struct pal_enclave * enclave,
         tcb, /*stack=*/NULL, alt_stack); /* main thread uses the stack provided by Linux */
     pal_thread_init(tcb);
 
+    SGX_DBG(DBG_I, "Ready to launch executable %s\n", exec_uri);
+
     /* start running trusted PAL */
     ecall_enclave_start(args, args_size, env, env_size);
+
+    SGX_DBG(DBG_I, "Executable %s exited\n", exec_uri);
 
 #if PRINT_ENCLAVE_STAT == 1
     PAL_NUM exit_time = 0;
@@ -967,6 +983,7 @@ static int load_enclave (struct pal_enclave * enclave,
 
     unmap_tcs();
     INLINE_SYSCALL(munmap, 2, alt_stack, ALT_STACK_SIZE);
+
     INLINE_SYSCALL(exit, 0);
     return 0;
 }
@@ -975,7 +992,7 @@ static int load_enclave (struct pal_enclave * enclave,
  * each stack page (Linux dynamically grows the stack of the main thread but gets confused with
  * huge-jump stack accesses coming from within the enclave). Note that other, non-main threads
  * are created manually via clone(.., THREAD_STACK_SIZE, ..) and thus do not need this hack. */
-static void __attribute__ ((noinline)) force_linux_to_grow_stack() {
+void __attribute__ ((noinline)) force_linux_to_grow_stack() {
     char dummy[THREAD_STACK_SIZE];
     for (uint64_t i = 0; i < sizeof(dummy); i += PRESET_PAGESIZE) {
         /* touch each page on the stack just to make it is not optimized away */
