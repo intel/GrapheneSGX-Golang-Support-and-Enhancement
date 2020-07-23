@@ -29,6 +29,7 @@
 #include "sgx_api.h"
 #include "sgx_attest.h"
 
+#define CPUID_0BH_LEAF 0xb
 #define TSC_REFINE_INIT_TIMEOUT_USECS 10000000
 
 static uint64_t g_tsc_hz = 0;
