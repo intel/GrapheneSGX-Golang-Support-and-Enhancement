@@ -143,7 +143,8 @@ int shim_do_fcntl(int fd, int cmd, unsigned long arg) {
          *   EACCES or EAGAIN.
          */
         case F_SETLK:
-            ret = -ENOSYS;
+            warn("F_SETLK is a dummy operation. \n");
+            ret = 0;
             break;
 
         /* F_SETLKW (struct flock *)
@@ -168,7 +169,8 @@ int shim_do_fcntl(int fd, int cmd, unsigned long arg) {
          *   the PID of the process holding that lock.
          */
         case F_GETLK:
-            ret = -ENOSYS;
+            warn("F_GETLK is a dummy operation. \n");
+            ret = 0;
             break;
 
         /* F_SETOWN (int)
