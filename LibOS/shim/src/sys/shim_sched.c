@@ -17,6 +17,7 @@
 #include <pal.h>
 #include <shim_internal.h>
 #include <shim_table.h>
+#include <shim_thread.h>
 
 int shim_do_sched_yield(void) {
     DkThreadYieldExecution();
@@ -155,33 +156,58 @@ static int check_affinity_params(int ncpus, size_t len, __kernel_cpu_set_t* user
     return bitmask_size_in_bytes;
 }
 
-/* dummy implementation: ignore user-supplied mask and return success */
 int shim_do_sched_setaffinity(pid_t pid, size_t len, __kernel_cpu_set_t* user_mask_ptr) {
-    __UNUSED(pid);
+    int retval = 0;
+    PAL_HANDLE thread = NULL;
     int ncpus = PAL_CB(cpu_info.cpu_num);
+
+    struct shim_thread* cur_thread = get_cur_thread();
+    if (!cur_thread)
+        return -ESRCH;
+
+    thread = cur_thread->pal_handle;
+
+    /* to set other thread requires host tid mapping */
+    if (pid != 0) {
+        debug("The thread id: %d is not supported for now.\n", pid);
+        return -ENOSYS;
+    }
 
     int bitmask_size_in_bytes = check_affinity_params(ncpus, len, user_mask_ptr);
     if (bitmask_size_in_bytes < 0)
         return bitmask_size_in_bytes;
 
+    if (!DkThreadSetCPUAffinity(thread, bitmask_size_in_bytes, user_mask_ptr)) {
+        return -PAL_ERRNO();
+    }
     return 0;
 }
 
-/* dummy implementation: always return all-ones (as many as there are host CPUs)  */
 int shim_do_sched_getaffinity(pid_t pid, size_t len, __kernel_cpu_set_t* user_mask_ptr) {
-    __UNUSED(pid);
+    int retval = 0;
+    PAL_HANDLE thread = NULL;
     int ncpus = PAL_CB(cpu_info.cpu_num);
+
+    struct shim_thread* cur_thread = get_cur_thread();
+    if (!cur_thread)
+        return -ESRCH;
+
+    thread = cur_thread->pal_handle;
+
+    /* to set other thread requires host tid mapping */
+    if (pid != 0) {
+        debug("The thread id: %d is not supported for now.\n", pid);
+        return -ENOSYS;
+    }
 
     int bitmask_size_in_bytes = check_affinity_params(ncpus, len, user_mask_ptr);
     if (bitmask_size_in_bytes < 0)
         return bitmask_size_in_bytes;
 
-    memset(user_mask_ptr, 0, len);
-    for (int i = 0; i < ncpus; i++) {
-        ((uint8_t*)user_mask_ptr)[i / 8] |= 1 << (i % 8);
+    if (!DkThreadGetCPUAffinity(thread, bitmask_size_in_bytes, user_mask_ptr)) {
+        return -PAL_ERRNO();
     }
-    /* imitate the Linux kernel implementation
-     * See SYSCALL_DEFINE3(sched_getaffinity) */
+    /* on success, imitate Linux kernel implementation: see SYSCALL_DEFINE3(sched_getaffinity) */
     return bitmask_size_in_bytes;
 }
 

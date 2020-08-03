@@ -27,6 +27,8 @@
  * size of 8MB. Thus, 512KB limit also works well for the main thread. */
 #define MAX_UNTRUSTED_STACK_BUF (THREAD_STACK_SIZE / 4)
 
+#define CPUID_0BH_LEAF 0xb
+
 /* global pointer to a single untrusted queue, all accesses must be protected by g_rpc_queue->lock */
 rpc_queue_t* g_rpc_queue;
 
@@ -266,6 +268,13 @@ int ocall_cpuid (unsigned int leaf, unsigned int subleaf,
                  unsigned int values[4])
 {
     int retval = 0;
+    int notrpc = 0;
+
+    /* the cpu topology info retrieved in current thread rather than rpc thread */
+    if (leaf == CPUID_0BH_LEAF) {
+        notrpc = 1;
+    }
+
     ms_ocall_cpuid_t * ms;
 
     void* old_ustack = sgx_prepare_ustack();
@@ -278,7 +287,7 @@ int ocall_cpuid (unsigned int leaf, unsigned int subleaf,
     WRITE_ONCE(ms->ms_leaf, leaf);
     WRITE_ONCE(ms->ms_subleaf, subleaf);
 
-    retval = sgx_exitless_ocall(OCALL_CPUID, ms);
+    retval = notrpc ? sgx_ocall(OCALL_CPUID, ms) : sgx_exitless_ocall(OCALL_CPUID, ms);
 
     if (!retval) {
         values[0] = READ_ONCE(ms->ms_values[0]);
@@ -775,6 +784,69 @@ out:
 int ocall_resume_thread (void * tcs)
 {
     return sgx_exitless_ocall(OCALL_RESUME_THREAD, tcs);
+}
+
+int ocall_sched_setaffinity (uint64_t tid, uint64_t cpu_len, void * cpu_mask)
+{
+    int retval = 0;
+    ms_ocall_sched_setaffinity_t* ms;
+
+    void* old_ustack = sgx_prepare_ustack();
+    ms = sgx_alloc_on_ustack_aligned(sizeof(*ms), alignof(*ms));
+    if (!ms) {
+        sgx_reset_ustack(old_ustack);
+        return -EPERM;
+    }
+
+    WRITE_ONCE(ms->ms_tid, tid);
+    WRITE_ONCE(ms->ms_cpu_len, cpu_len);
+    void* untrusted_cpu_mask = sgx_copy_to_ustack(cpu_mask, cpu_len);
+    if (!untrusted_cpu_mask) {
+        sgx_reset_ustack(old_ustack);
+        return -EPERM;
+    }
+    WRITE_ONCE(ms->ms_cpu_mask, untrusted_cpu_mask);
+
+    retval = tid == 0 ? sgx_ocall(OCALL_SCHED_SETAFFINITY, ms) :
+                        sgx_exitless_ocall(OCALL_SCHED_SETAFFINITY, ms);
+
+    sgx_reset_ustack(old_ustack);
+
+    return retval;
+}
+
+int ocall_sched_getaffinity (uint64_t tid, uint64_t cpu_len, void * cpu_mask)
+{
+    int retval = 0;
+    ms_ocall_sched_getaffinity_t* ms;
+
+    void* old_ustack = sgx_prepare_ustack();
+    ms = sgx_alloc_on_ustack_aligned(sizeof(*ms), alignof(*ms));
+    if (!ms) {
+        sgx_reset_ustack(old_ustack);
+        return -EPERM;
+    }
+
+    WRITE_ONCE(ms->ms_tid, tid);
+    WRITE_ONCE(ms->ms_cpu_len, cpu_len);
+    void* untrusted_cpu_mask = sgx_copy_to_ustack(cpu_mask, cpu_len);
+    if (!untrusted_cpu_mask) {
+        sgx_reset_ustack(old_ustack);
+        return -EPERM;
+    }
+    WRITE_ONCE(ms->ms_cpu_mask, untrusted_cpu_mask);
+
+    retval = tid == 0 ? sgx_ocall(OCALL_SCHED_GETAFFINITY, ms) :
+                        sgx_exitless_ocall(OCALL_SCHED_GETAFFINITY, ms);
+
+    if (retval > 0) {
+        retval = sgx_copy_to_enclave(cpu_mask, cpu_len,
+                                     READ_ONCE(ms->ms_cpu_mask), retval);
+    }
+
+    sgx_reset_ustack(old_ustack);
+
+    return retval;
 }
 
 int ocall_clone_thread (void)

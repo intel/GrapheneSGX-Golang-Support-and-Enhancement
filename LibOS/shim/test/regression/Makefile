@@ -55,6 +55,7 @@ c_executables = \
 	pselect \
 	readdir \
 	sched \
+	sched_set_get_cpuaffinity \
 	select \
 	shared_object \
 	sigaction_per_process \
