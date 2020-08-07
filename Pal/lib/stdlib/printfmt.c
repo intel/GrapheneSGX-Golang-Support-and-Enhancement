@@ -31,6 +31,7 @@ static int printnum(int (*_fputch)(void*, int, void*), void* f, void* putdat,
     return 0;
 }
 
+
 // Get an unsigned integer of various possible sizes from a varargs list, depending on the lflag
 // parameter.
 // Defined as macro because it alters `ap` and passing `va_list` by pointer turns out to be tricky
@@ -50,6 +51,43 @@ static int printnum(int (*_fputch)(void*, int, void*), void* f, void* putdat,
     : (lflag)               \
         ? va_arg(ap, long)  \
         : va_arg(ap, int))
+
+// Get an unsigned int of various possible sizes from a varargs list,
+// depending on the lflag parameter.
+#if !defined(__i386__)
+static unsigned long long getuint(va_list ap, int lflag)
+#else
+static unsigned long getuint(va_list ap, int lflag)
+#endif
+{
+#if !defined(__i386__)
+    if (lflag >= 2)
+        return va_arg(ap, unsigned long long);
+#endif
+    if (lflag)
+        return va_arg(ap, unsigned long);
+    return va_arg(ap, unsigned int);
+}
+
+// Same as getuint but signed - can't use getuint
+// because of sign extension
+#if !defined(__i386__)
+static long long getint(va_list ap, int lflag)
+#else
+static long getint(va_list ap, int lflag)
+#endif
+{
+#if !defined(__i386__)
+    if (lflag >= 2)
+        return va_arg(ap, long long);
+#endif
+    if (lflag)
+        return va_arg(ap, long);
+    return va_arg(ap, int);
+}
+
+// Main function to format and print a string.
+void fprintfmt(int (*_fputch)(void*, int, void*), void* f, void* putdat, const char* fmt, ...);
 
 void vfprintfmt(int (*_fputch)(void*, int, void*), void* f, void* putdat, const char* fmt,
                 va_list ap) {

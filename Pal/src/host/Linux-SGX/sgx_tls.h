@@ -1,6 +1,9 @@
 #ifndef __SGX_TLS_H__
 #define __SGX_TLS_H__
 
+#include <pal.h>
+#include <sysdeps/generic/setjmp.h>
+
 #include <stdatomic.h>
 
 #include "pal.h"
@@ -80,6 +83,11 @@ static inline struct enclave_tls* get_tcb_trts(void) {
              "i" (offsetof(struct enclave_tls, member)));           \
     } while (0)
 # else
+typedef enum {
+    JMP_UNSET = 0,
+    JMP_SET,
+} JMP_STATUS_t;
+
 /* private to untrusted Linux PAL, unique to each untrusted thread */
 typedef struct pal_tcb_urts {
     struct pal_tcb_urts* self;
@@ -89,6 +97,9 @@ typedef struct pal_tcb_urts {
     atomic_ulong        eenter_cnt; /* # of EENTERs, corresponds to # of ECALLs */
     atomic_ulong        eexit_cnt;  /* # of EEXITs, corresponds to # of OCALLs */
     atomic_ulong        aex_cnt;    /* # of AEXs, corresponds to # of interrupts/signals */
+    jmp_buf             jmp;       /* jump buffer store return point */
+    JMP_STATUS_t        jmp_set;   /* flag indicates whether jump or not */
+    int                 exitcode;  /* exit code of app after jump back */
 } PAL_TCB_URTS;
 
 extern void pal_tcb_urts_init(PAL_TCB_URTS* tcb, void* stack, void* alt_stack);

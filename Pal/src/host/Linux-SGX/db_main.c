@@ -31,6 +31,8 @@
 #define RTLD_BOOTSTRAP
 #define _ENTRY enclave_entry
 
+static struct atomic_int pal_has_setup = ATOMIC_INIT(0);
+
 struct pal_linux_state g_linux_state;
 struct pal_sec g_pal_sec;
 
@@ -228,13 +230,15 @@ void pal_linux_main(char* uptr_args, uint64_t args_size, char* uptr_env, uint64_
         memset(zero2_start, 0, zero2_end - zero2_start);
     }
 
-    /* relocate PAL itself */
-    g_pal_map.l_addr = elf_machine_load_address();
-    g_pal_map.l_name = ENCLAVE_PAL_FILENAME;
-    elf_get_dynamic_info((void*)g_pal_map.l_addr + elf_machine_dynamic(), g_pal_map.l_info,
-                         g_pal_map.l_addr);
+    if (atomic_cmpxchg(&pal_has_setup, 0, 1) == 0) {
+        /* relocate PAL itself */
+        g_pal_map.l_addr = elf_machine_load_address();
+        g_pal_map.l_name = ENCLAVE_PAL_FILENAME;
+        elf_get_dynamic_info((void*)g_pal_map.l_addr + elf_machine_dynamic(), g_pal_map.l_info,
+                             g_pal_map.l_addr);
 
-    ELF_DYNAMIC_RELOCATE(&g_pal_map);
+        ELF_DYNAMIC_RELOCATE(&g_pal_map);
+    }
 
     /*
      * We can't verify the following arguments from the urts. So we copy
@@ -433,4 +437,3 @@ void pal_linux_main(char* uptr_args, uint64_t args_size, char* uptr_env, uint64_
     pal_main(g_pal_sec.instance_id, manifest, exec, g_pal_sec.exec_addr, parent, first_thread,
              arguments, environments);
 }
-

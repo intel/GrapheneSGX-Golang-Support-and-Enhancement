@@ -23,10 +23,9 @@
 #include <sysdeps/generic/ldsodefs.h>
 
 size_t g_page_size = PRESET_PAGESIZE;
-
+static int enclave_started = 0;
 struct pal_enclave pal_enclave;
 
-static inline
 char * alloc_concat(const char * p, size_t plen,
                     const char * s, size_t slen)
 {
@@ -80,7 +79,7 @@ static unsigned long parse_int (const char * str)
     return num;
 }
 
-static char * resolve_uri (const char * uri, const char ** errstring)
+char * resolve_uri (const char * uri, const char ** errstring)
 {
     if (!strstartswith_static(uri, URI_PREFIX_FILE)) {
         *errstring = "Invalid URI";
@@ -676,6 +675,99 @@ out:
     return ret;
 }
 
+static int mcast_s (int port)
+{
+    struct sockaddr_in addr;
+    int ret = 0;
+    addr.sin_family = AF_INET;
+    addr.sin_addr.s_addr = INADDR_ANY;
+    addr.sin_port = htons(port);
+
+    int fd = INLINE_SYSCALL(socket, 3, AF_INET, SOCK_DGRAM, 0);
+
+    if (IS_ERR(fd))
+        return -ERRNO(fd);
+
+    ret = INLINE_SYSCALL(setsockopt, 5, fd, IPPROTO_IP, IP_MULTICAST_IF,
+                         &addr.sin_addr.s_addr, sizeof(addr.sin_addr.s_addr));
+    if (IS_ERR(ret))
+        return -ERRNO(ret);
+
+    return fd;
+}
+
+static int mcast_c (int port)
+{
+    int ret = 0, fd;
+
+    struct sockaddr_in addr;
+    addr.sin_family = AF_INET;
+    addr.sin_addr.s_addr = INADDR_ANY;
+    addr.sin_port = htons(port);
+
+    fd = INLINE_SYSCALL(socket, 3, AF_INET, SOCK_DGRAM, 0);
+    if (IS_ERR(fd))
+        return -ERRNO(fd);
+
+    int reuse = 1;
+    INLINE_SYSCALL(setsockopt, 5, fd, SOL_SOCKET, SO_REUSEADDR,
+                   &reuse, sizeof(reuse));
+
+    ret = INLINE_SYSCALL(bind, 3, fd, &addr, sizeof(addr));
+    if (IS_ERR(ret))
+        return -ERRNO(ret);
+
+    ret = INLINE_SYSCALL(setsockopt, 5, fd, IPPROTO_IP, IP_MULTICAST_IF,
+                         &addr.sin_addr.s_addr, sizeof(addr.sin_addr.s_addr));
+    if (IS_ERR(ret))
+        return -ERRNO(ret);
+
+    /* TODO: MCAST_GROUP isn't supported any more */
+    /* inet_pton4(MCAST_GROUP, sizeof(MCAST_GROUP) - 1, */
+    /*            &addr.sin_addr.s_addr); */
+
+    struct ip_mreq group;
+    group.imr_multiaddr.s_addr = addr.sin_addr.s_addr;
+    group.imr_interface.s_addr = INADDR_ANY;
+
+    ret = INLINE_SYSCALL(setsockopt, 5, fd, IPPROTO_IP, IP_ADD_MEMBERSHIP,
+                         &group, sizeof(group));
+    if (IS_ERR(ret))
+        return -ERRNO(ret);
+
+    return fd;
+}
+
+/* Based on Robert Jenkins' hash algorithm. */
+static uint64_t hash64(uint64_t key) {
+    key = (~key) + (key << 21);
+    key = key ^ (key >> 24);
+    key = (key + (key << 3)) + (key << 8);
+    key = key ^ (key >> 14);
+    key = (key + (key << 2)) + (key << 4);
+    key = key ^ (key >> 28);
+    key = key + (key << 31);
+    return key;
+}
+
+static unsigned long randval = 0;
+
+void getrand (void * buffer, size_t size)
+{
+    size_t bytes = 0;
+
+    while (bytes + sizeof(uint64_t) <= size) {
+        *(uint64_t*) (buffer + bytes) = randval;
+        randval = hash64(randval);
+        bytes += sizeof(uint64_t);
+    }
+
+    if (bytes < size) {
+        memcpy(buffer + bytes, &randval, size - bytes);
+        randval = hash64(randval);
+    }
+}
+
 static void create_instance (struct pal_sec * pal_sec)
 {
     PAL_NUM id = ((uint64_t)rdrand() << 32) | rdrand();
@@ -683,7 +775,7 @@ static void create_instance (struct pal_sec * pal_sec)
     pal_sec->instance_id = id;
 }
 
-static int load_manifest (int fd, struct config_store ** config_ptr)
+int load_manifest (int fd, struct config_store ** config_ptr)
 {
     int ret = 0;
 
@@ -735,7 +827,7 @@ out:
  * Returns the number of online CPUs read from /sys/devices/system/cpu/online, -errno on failure.
  * Understands complex formats like "1,3-5,6".
  */
-static int get_cpu_count(void) {
+int get_cpu_count(void) {
     int fd = INLINE_SYSCALL(open, 3, "/sys/devices/system/cpu/online", O_RDONLY|O_CLOEXEC, 0);
     if (fd < 0)
         return unix_to_pal_error(ERRNO(fd));
@@ -779,7 +871,7 @@ static int get_cpu_count(void) {
     return cpu_count;
 }
 
-static int load_enclave(struct pal_enclave* enclave, int manifest_fd, char* manifest_uri,
+int load_enclave(struct pal_enclave* enclave, int manifest_fd, char* manifest_uri,
                         char* exec_uri, char* args, size_t args_size, char* env, size_t env_size,
                         bool exec_uri_inferred, bool need_gsgx) {
     struct pal_sec * pal_sec = &enclave->pal_sec;
@@ -906,7 +998,38 @@ static int load_enclave(struct pal_enclave* enclave, int manifest_fd, char* mani
 
     memcpy(pal_sec->manifest_name, manifest_uri, strlen(manifest_uri) + 1);
 
-    memcpy(pal_sec->exec_name, exec_uri, strlen(exec_uri) + 1);
+    if (exec_uri) {
+        size_t len = strlen(exec_uri);
+        if (sizeof(pal_sec->exec_name) < len) {
+            len = sizeof(pal_sec->exec_name);
+        }
+        len -= 1;
+        memcpy(pal_sec->exec_name, exec_uri, len + 1);
+        pal_sec->exec_name[len] = '\0';
+    }
+
+    /* TODO: The mcast feature has been removed by following commit. */
+    /* https://github.com/oscarlab/graphene/tree/2c6ff2718f1361e47a0e12be6f3ed3bdb2215902 */
+    /* if (!pal_sec->mcast_port) { */
+    /*     unsigned short mcast_port; */
+    /*     getrand(&mcast_port, sizeof(unsigned short)); */
+    /*     pal_sec->mcast_port = mcast_port > 1024 ? mcast_port : mcast_port + 1024; */
+    /* } */
+
+    /* if ((ret = mcast_s(pal_sec->mcast_port)) >= 0) { */
+    /*     pal_sec->mcast_srv = ret; */
+    /*     if ((ret = mcast_c(pal_sec->mcast_port)) >= 0) { */
+    /*         pal_sec->mcast_cli = ret; */
+    /*     } else { */
+    /*         INLINE_SYSCALL(close, 1, pal_sec->mcast_srv); */
+    /*         pal_sec->mcast_srv = 0; */
+    /*     } */
+    /* } */
+
+    if (!exec_uri) {
+        /* Deferred executable loading */
+        return 0;
+    }
 
     ret = sgx_signal_setup();
     if (ret < 0)
@@ -948,11 +1071,22 @@ static int load_enclave(struct pal_enclave* enclave, int manifest_fd, char* mani
         tcb, /*stack=*/NULL, alt_stack); /* main thread uses the stack provided by Linux */
     pal_thread_init(tcb);
 
+    SGX_DBG(DBG_I, "Ready to launch executable %s\n", exec_uri);
+
     /* start running trusted PAL */
     ecall_enclave_start(args, args_size, env, env_size);
 
+    SGX_DBG(DBG_I, "Executable %s exited\n", exec_uri);
+
+#if PRINT_ENCLAVE_STAT == 1
+    PAL_NUM exit_time = 0;
+    INLINE_SYSCALL(gettimeofday, 2, &tv, NULL);
+    exit_time = tv.tv_sec * 1000000UL + tv.tv_usec;
+#endif
+
     unmap_tcs();
     INLINE_SYSCALL(munmap, 2, alt_stack, ALT_STACK_SIZE);
+
     INLINE_SYSCALL(exit, 0);
     return 0;
 }

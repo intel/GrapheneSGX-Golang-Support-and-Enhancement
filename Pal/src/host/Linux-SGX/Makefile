@@ -23,11 +23,21 @@ ASFLAGS += \
 	-I../../../include \
 	-I../../../include/arch/$(ARCH)/Linux
 
-host_files = libpal-Linux-SGX.a pal-sgx debugger/sgx_gdb.so pal.map generated_offsets.py
+ARCH ?= x86_64
+CFLAGS  += -I include/sysdeps/$(ARCH)
 
-defs	= -DIN_PAL -DPAL_DIR=$(PAL_DIR) -DRUNTIME_DIR=$(RUNTIME_DIR)
+host_files = libpal-Linux-SGX.a pal-sgx gsgx debugger/sgx_gdb.so pal.map generated_offsets.py
+
+defs	= -DIN_PAL -DPAL_DIR=$(PAL_DIR) -DRUNTIME_DIR=$(RUNTIME_DIR) -fPIC
 CFLAGS += $(defs)
 ASFLAGS += $(defs)
+enclave-objs = $(addprefix db_,files devices pipes eventfd sockets streams memory \
+		 threading mutex events process object main rtld \
+		 exception misc) \
+	       $(addprefix enclave_,ocalls ecalls framework platform pages untrusted)
+enclave-asm-objs = enclave_entry
+urts-asm-objs = sgx_entry.o jmp.o
+graphene_lib = .lib/graphene-lib.a
 
 commons_objs = bogomips.o
 
@@ -112,10 +122,13 @@ $(commons_objs): %.o: ../Linux-common/%.c
 %.s: %.S
 	$(call cmd,cpp_s_S)
 
-CFLAGS-pal-sgx = -Wl,-z,relro,-z,now -pie
-LDLIBS-pal-sgx += -lprotobuf-c
 pal-sgx: $(urts-objs) $(urts-asm-objs) $(graphene_lib)
-	$(call cmd,cmulti)
+	@echo [ host/Linux-SGX/$@ ]
+	@$(CC) $(CFLAGS) -Wl,-z,relro,-z,now -pie -rdynamic $^ -lc -lprotobuf-c -o $@
+
+gsgx: $(urts-objs) $(urts-asm-objs) $(graphene_lib) rune_pal.o rune_pal_impl.o
+	@echo [ host/Linux-SGX/$@ ]
+	@$(CC) $(CFLAGS) -shared -Wl,-z,relro,-z,now -pie -rdynamic $^ -lc -lprotobuf-c -o liberpal-$@.so -Wl,-soname,liberpal-$@.so.1
 
 quote/aesm.pb-c.o: quote/aesm.pb-c.c quote/aesm.pb-c.h
 quote/aesm.pb-c.c quote/aesm.pb-c.h: quote/aesm.proto
@@ -128,7 +141,7 @@ CFLAGS-debugger/sgx_gdb.so = -shared -Wall -fPIC -O2 -std=c11
 debugger/sgx_gdb.so: debugger/sgx_gdb.c
 	$(call cmd,csingle)
 
-enclave_entry.o sgx_entry.o: asm-offsets.h
+enclave_entry.o sgx_entry.o jmp.o: asm-offsets.h
 
 sgx-driver/sgx.h:
 	$(MAKE) -C sgx-driver $(notdir $@)

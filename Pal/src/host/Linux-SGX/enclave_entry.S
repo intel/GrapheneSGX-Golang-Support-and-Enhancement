@@ -64,6 +64,9 @@ enclave_entry:
 	# RDX - exit target
 	# RCX - enclave base
 
+	cmpq $ECALL_ENCLAVE_RESET, %rdi
+	je .Lhandle_enclave_reset
+
 	cmpq $ECALL_THREAD_RESET, %rdi
 	je .Lhandle_thread_reset
 
@@ -111,9 +114,16 @@ enclave_entry:
 	fxrstor (%rax)
 	xorq %rax, %rax
 
+.Lhandle_enclave_reset:
+	# store ecall index
+	movq %rdi, %rbx
+
 	# register states need to be carefully checked, so we move the handling
 	# to handle_ecall() in enclave_ecalls.c
 	callq handle_ecall
+
+	cmpq $ECALL_ENCLAVE_RESET, %rbx
+	je .Lreturn_from_ecall
 
 	# handle_ecall will only return when invalid parameters has been passed.
 	FAIL_LOOP
@@ -144,6 +154,12 @@ enclave_entry:
 	movq $0, %gs:SGX_OCALL_EXIT_CALLED
 	movq $0, %gs:SGX_PRE_OCALL_STACK
 
+	# Assertion: thread is reset only after special-case OCALL_EXIT which
+	# does *not* set SGX_OCALL_PREPARED = 1.
+	cmpq $0, %gs:SGX_OCALL_PREPARED
+	je .Lreturn_from_ecall
+	FAIL_LOOP
+.Lreturn_from_ecall:
 	# Instead of jumping to .Lclear_and_eexit, simply perform EEXIT because
 	# there is no modified state to clear in this "thread-reset" code path.
 	movq %gs:SGX_ECALL_RETURN_ADDR, %rbx

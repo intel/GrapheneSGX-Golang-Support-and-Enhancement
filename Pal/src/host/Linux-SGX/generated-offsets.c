@@ -114,6 +114,7 @@ void dummy(void)
     OFFSET(PAL_TCB_URTS_EENTER_CNT, pal_tcb_urts, eenter_cnt);
     OFFSET(PAL_TCB_URTS_EEXIT_CNT, pal_tcb_urts, eexit_cnt);
     OFFSET(PAL_TCB_URTS_AEX_CNT, pal_tcb_urts, aex_cnt);
+    OFFSET(PAL_TCB_URTS_JMP, pal_tcb_urts, jmp);
 
     /* sgx_arch_tcs_t */
     OFFSET_T(TCS_FLAGS, sgx_arch_tcs_t, flags);
@@ -171,6 +172,7 @@ void dummy(void)
 
     /* Ecall numbers */
     DEFINE(ECALL_ENCLAVE_START, ECALL_ENCLAVE_START);
+    DEFINE(ECALL_ENCLAVE_RESET, ECALL_ENCLAVE_RESET);
     DEFINE(ECALL_THREAD_START, ECALL_THREAD_START);
     DEFINE(ECALL_THREAD_RESET, ECALL_THREAD_RESET);
 
