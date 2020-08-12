@@ -155,8 +155,8 @@ enclave_entry:
 	movq $0, %gs:SGX_PRE_OCALL_STACK
 
 	# Assertion: thread is reset only after special-case OCALL_EXIT which
-	# does *not* set SGX_OCALL_PREPARED = 1.
-	cmpq $0, %gs:SGX_OCALL_PREPARED
+	# does *not* set SGX_PRE_OCALL_STACK = 1.
+	cmpq $0, %gs:SGX_PRE_OCALL_STACK
 	je .Lreturn_from_ecall
 	FAIL_LOOP
 .Lreturn_from_ecall:

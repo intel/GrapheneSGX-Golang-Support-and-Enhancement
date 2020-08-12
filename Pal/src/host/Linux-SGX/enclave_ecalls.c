@@ -75,7 +75,7 @@ void handle_ecall(long ecall_index, void* ecall_args, void* exit_target, void* e
     SET_ENCLAVE_TLS(untrusted_area_cache.in_use, 0UL);
 
     if (ecall_index == ECALL_ENCLAVE_RESET) {
-        atomic_set(&enclave_start_called, 0);
+        __atomic_store_n(&enclave_start_called.counter, 0, __ATOMIC_SEQ_CST);
         return;
     }
 

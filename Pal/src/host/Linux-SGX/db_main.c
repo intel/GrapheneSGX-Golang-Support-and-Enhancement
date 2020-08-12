@@ -230,7 +230,9 @@ void pal_linux_main(char* uptr_args, uint64_t args_size, char* uptr_env, uint64_
         memset(zero2_start, 0, zero2_end - zero2_start);
     }
 
-    if (atomic_cmpxchg(&pal_has_setup, 0, 1) == 0) {
+    int64_t atom_old = 0;
+    if (__atomic_compare_exchange_n(&pal_has_setup.counter, &atom_old, 1, /*weak=*/false,
+                                    __ATOMIC_SEQ_CST, __ATOMIC_RELAXED) == 0) {
         /* relocate PAL itself */
         g_pal_map.l_addr = elf_machine_load_address();
         g_pal_map.l_name = ENCLAVE_PAL_FILENAME;
