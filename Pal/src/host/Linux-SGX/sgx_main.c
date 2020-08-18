@@ -675,69 +675,6 @@ out:
     return ret;
 }
 
-static int mcast_s (int port)
-{
-    struct sockaddr_in addr;
-    int ret = 0;
-    addr.sin_family = AF_INET;
-    addr.sin_addr.s_addr = INADDR_ANY;
-    addr.sin_port = htons(port);
-
-    int fd = INLINE_SYSCALL(socket, 3, AF_INET, SOCK_DGRAM, 0);
-
-    if (IS_ERR(fd))
-        return -ERRNO(fd);
-
-    ret = INLINE_SYSCALL(setsockopt, 5, fd, IPPROTO_IP, IP_MULTICAST_IF,
-                         &addr.sin_addr.s_addr, sizeof(addr.sin_addr.s_addr));
-    if (IS_ERR(ret))
-        return -ERRNO(ret);
-
-    return fd;
-}
-
-static int mcast_c (int port)
-{
-    int ret = 0, fd;
-
-    struct sockaddr_in addr;
-    addr.sin_family = AF_INET;
-    addr.sin_addr.s_addr = INADDR_ANY;
-    addr.sin_port = htons(port);
-
-    fd = INLINE_SYSCALL(socket, 3, AF_INET, SOCK_DGRAM, 0);
-    if (IS_ERR(fd))
-        return -ERRNO(fd);
-
-    int reuse = 1;
-    INLINE_SYSCALL(setsockopt, 5, fd, SOL_SOCKET, SO_REUSEADDR,
-                   &reuse, sizeof(reuse));
-
-    ret = INLINE_SYSCALL(bind, 3, fd, &addr, sizeof(addr));
-    if (IS_ERR(ret))
-        return -ERRNO(ret);
-
-    ret = INLINE_SYSCALL(setsockopt, 5, fd, IPPROTO_IP, IP_MULTICAST_IF,
-                         &addr.sin_addr.s_addr, sizeof(addr.sin_addr.s_addr));
-    if (IS_ERR(ret))
-        return -ERRNO(ret);
-
-    /* TODO: MCAST_GROUP isn't supported any more */
-    /* inet_pton4(MCAST_GROUP, sizeof(MCAST_GROUP) - 1, */
-    /*            &addr.sin_addr.s_addr); */
-
-    struct ip_mreq group;
-    group.imr_multiaddr.s_addr = addr.sin_addr.s_addr;
-    group.imr_interface.s_addr = INADDR_ANY;
-
-    ret = INLINE_SYSCALL(setsockopt, 5, fd, IPPROTO_IP, IP_ADD_MEMBERSHIP,
-                         &group, sizeof(group));
-    if (IS_ERR(ret))
-        return -ERRNO(ret);
-
-    return fd;
-}
-
 /* Based on Robert Jenkins' hash algorithm. */
 static uint64_t hash64(uint64_t key) {
     key = (~key) + (key << 21);
