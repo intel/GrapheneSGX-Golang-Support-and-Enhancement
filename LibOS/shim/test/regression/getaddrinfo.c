@@ -129,7 +129,20 @@ fetch_ifaddrs(int fd)
 int main (void)
 {
     int ret = -1;
+    printf ("Testing netlink protocol in bind way.\n");
     int fd = socket (PF_NETLINK, SOCK_RAW | SOCK_CLOEXEC, NETLINK_ROUTE);
+    if (fd > 0) {
+        struct sockaddr_nl nladdr;
+        memset (&nladdr, '\0', sizeof (nladdr));
+        nladdr.nl_family = AF_NETLINK;
+        
+        if (bind (fd, (struct sockaddr *) &nladdr, sizeof (nladdr)) == 0)
+            ret = fetch_ifaddrs(fd);
+        close(fd);
+        assert(ret == 0);
+    }
+    printf ("Testing netlink protocol in connect way.\n");
+    fd = socket (PF_NETLINK, SOCK_RAW | SOCK_CLOEXEC, NETLINK_ROUTE);
     if (fd > 0) {
         struct sockaddr_nl nladdr;
         memset (&nladdr, '\0', sizeof (nladdr));
@@ -137,6 +150,9 @@ int main (void)
         
         if (connect (fd, (struct sockaddr *) &nladdr, sizeof (nladdr)) == 0)
             ret = fetch_ifaddrs(fd);
+        close(fd);
+        assert(ret == 0);
     }
+    printf ("TEST netlink protocol in both bind and connect ways... SUCCESS\n");
     return ret;
 }
