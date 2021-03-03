@@ -113,6 +113,8 @@ enum {
     pal_type_tcpsrv,
     pal_type_udp,
     pal_type_udpsrv,
+    pal_type_netlink,
+    pal_type_netlinksrv,
     pal_type_process,
     pal_type_thread,
     pal_type_mutex,

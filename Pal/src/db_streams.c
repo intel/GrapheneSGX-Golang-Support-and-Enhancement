@@ -23,6 +23,8 @@ extern struct handle_ops g_dir_ops;
 extern struct handle_ops g_tcp_ops;
 extern struct handle_ops g_udp_ops;
 extern struct handle_ops g_udpsrv_ops;
+extern struct handle_ops g_netlink_ops;
+extern struct handle_ops g_netlinksrv_ops;
 extern struct handle_ops g_thread_ops;
 extern struct handle_ops g_proc_ops;
 extern struct handle_ops g_mutex_ops;
@@ -41,6 +43,8 @@ const struct handle_ops* g_pal_handle_ops[PAL_HANDLE_TYPE_BOUND] = {
     [pal_type_tcpsrv]  = &g_tcp_ops,
     [pal_type_udp]     = &g_udp_ops,
     [pal_type_udpsrv]  = &g_udpsrv_ops,
+    [pal_type_netlink]     = &g_netlink_ops,
+    [pal_type_netlinksrv]  = &g_netlinksrv_ops,
     [pal_type_process] = &g_proc_ops,
     [pal_type_thread]  = &g_thread_ops,
     [pal_type_mutex]   = &g_mutex_ops,
@@ -95,6 +99,7 @@ static int parse_stream_uri(const char** uri, char** prefix, struct handle_ops**
             static_assert(static_strlen(URI_PREFIX_TCP_SRV) == 8, "URI_PREFIX_TCP_SRV has unexpected length");
             static_assert(static_strlen(URI_PREFIX_UDP_SRV) == 8, "URI_PREFIX_UDP_SRV has unexpected length");
             static_assert(static_strlen(URI_PREFIX_EVENTFD) == 8, "URI_PREFIX_EVENTFD has unexpected length");
+            static_assert(static_strlen(URI_PREFIX_NETLINK) == 8, "URI_PREFIX_NETLINK has unexpected length");
 
             if (strstartswith(u, URI_PREFIX_TCP_SRV))
                 hops = &g_tcp_ops;
@@ -102,6 +107,8 @@ static int parse_stream_uri(const char** uri, char** prefix, struct handle_ops**
                 hops = &g_udp_ops;
             else if (strstartswith(u, URI_PREFIX_EVENTFD))
                 hops = &g_eventfd_ops;
+            else if (strstartswith(u, URI_PREFIX_NETLINK))
+                hops = &g_netlink_ops;
             break;
 
         case 9: ;
@@ -109,6 +116,13 @@ static int parse_stream_uri(const char** uri, char** prefix, struct handle_ops**
 
             if (strstartswith(u, URI_PREFIX_PIPE_SRV))
                 hops = &g_pipe_ops;
+            break;
+
+        case 12: ;
+            static_assert(static_strlen(URI_PREFIX_NETLINK_SRV) == 12, "URI_PREFIX_NETLINK_SRV has unexpected length");
+
+            if (strstartswith(u, URI_PREFIX_NETLINK_SRV))
+                hops = &g_netlinksrv_ops;
             break;
 
         default:

@@ -11,6 +11,7 @@
 #include <linux/fcntl.h>
 #include <linux/in.h>
 #include <linux/in6.h>
+#include <linux/netlink.h>
 
 #include "hex.h"
 #include "pal.h"
@@ -52,6 +53,8 @@ static size_t minimal_addrlen(int domain) {
             return sizeof(struct sockaddr_in);
         case AF_INET6:
             return sizeof(struct sockaddr_in6);
+        case AF_NETLINK:
+            return sizeof(struct sockaddr_nl);
         default:
             return sizeof(struct sockaddr);
     }
@@ -59,6 +62,8 @@ static size_t minimal_addrlen(int domain) {
 
 static int inet_parse_addr(int domain, int type, const char* uri, struct addr_inet* bind,
                            struct addr_inet* conn);
+static int netlink_parse_addr(int domain, int type, const char* uri, struct addr_nl* bind,
+                              struct addr_nl* conn);
 
 static int __process_pending_options(struct shim_handle* hdl);
 
@@ -82,6 +87,7 @@ long shim_do_socket(int family, int type, int protocol) {
         case AF_UNIX:   // Local communication
         case AF_INET:   // IPv4 Internet protocols          ip(7)
         case AF_INET6:  // IPv6 Internet protocols
+        case AF_NETLINK:// Netlink protocols
             break;
 
         default:
@@ -93,6 +99,9 @@ long shim_do_socket(int family, int type, int protocol) {
         case SOCK_STREAM:  // TCP
             break;
         case SOCK_DGRAM:  // UDP
+            hdl->acc_mode = MAY_READ | MAY_WRITE;
+            break;
+        case SOCK_RAW: // RAW
             hdl->acc_mode = MAY_READ | MAY_WRITE;
             break;
 
@@ -162,6 +171,20 @@ static int inet_translate_addr(int domain, char* buf, size_t buf_size, struct ad
     } else {
         return -EPROTONOSUPPORT;
     }
+    if (len < 0)
+        return len;
+    if (output_len)
+        *output_len = (size_t)len;
+    return (size_t)len >= buf_size ? -ENAMETOOLONG : 0;
+}
+
+static int netlink_translate_addr(int domain, char* buf, size_t buf_size,
+                                   int protocol, struct addr_nl* addr,size_t* output_len) {
+    int len; /* snprintf returns `int` */
+    if (domain == AF_NETLINK)
+        len = snprintf(buf, buf_size, "%u.%u.%u", protocol, addr->pid, addr->groups);
+    else
+        return -EPROTONOSUPPORT;
     if (len < 0)
         return len;
     if (output_len)
@@ -278,6 +301,69 @@ static int inet_create_uri(int domain, char* buf, size_t buf_size, int sock_type
     return 0;
 }
 
+static ssize_t netlink_create_uri(int domain, char* buf, size_t buf_size, int sock_type, int protocol,
+                                  enum shim_sock_state state, struct addr_nl* bind,
+				  struct addr_nl* conn, size_t* output_len) {
+    size_t len = 0;
+    int ret;
+    size_t addr_len;
+
+    if (sock_type == SOCK_DGRAM || sock_type == SOCK_RAW) {
+        switch (state) {
+            case SOCK_CREATED:
+            case SOCK_SHUTDOWN:
+                return -ENOTCONN;
+
+            case SOCK_LISTENED:
+            case SOCK_ACCEPTED:
+                return -EOPNOTSUPP;
+
+            case SOCK_BOUNDCONNECTED:
+                len = static_strlen(URI_PREFIX_NETLINK_SRV);
+                if (buf_size < len + 1)
+                    return -ENAMETOOLONG;
+                memcpy(buf, URI_PREFIX_NETLINK_SRV, len + 1);
+                ret = netlink_translate_addr(domain, buf + len, buf_size - len, protocol, bind, &addr_len);
+                if (ret < 0)
+                    return ret;
+                buf[len + addr_len] = ':';
+                len += addr_len + 1;
+                ret = netlink_translate_addr(domain, buf + len, buf_size - len, protocol, conn, &addr_len);
+                if (ret < 0)
+                    return ret;
+                len += addr_len;
+                break;
+            case SOCK_BOUND:
+                len = static_strlen(URI_PREFIX_NETLINK_SRV);
+                if (buf_size < len + 1)
+                    return -ENAMETOOLONG;
+                memcpy(buf, URI_PREFIX_NETLINK_SRV, len + 1);
+                ret = netlink_translate_addr(domain, buf + len, buf_size - len, protocol, bind, &addr_len);
+                if (ret < 0)
+                    return ret;
+                len += addr_len;
+                break;
+            case SOCK_CONNECTED:
+                len = static_strlen(URI_PREFIX_NETLINK);
+                if (buf_size < len + 1)
+                    return -ENAMETOOLONG;
+                memcpy(buf, URI_PREFIX_NETLINK, len + 1);
+                ret = netlink_translate_addr(domain, buf + len, buf_size - len, protocol, conn, &addr_len);
+                if (ret < 0)
+                    return ret;
+                len += addr_len;
+                break;
+        }
+    } else {
+        return -EPROTONOSUPPORT;
+    }
+
+    /* success */
+    if (output_len)
+        *output_len = len;
+    return 0;
+}
+
 static inline void unix_copy_addr(struct sockaddr* saddr, struct shim_dentry* dent) {
     struct sockaddr_un* un = (struct sockaddr_un*)saddr;
     un->sun_family = AF_UNIX;
@@ -308,6 +394,18 @@ static int inet_check_addr(int domain, struct sockaddr* addr, size_t addrlen) {
         if (addr->sa_family != AF_INET && addr->sa_family != AF_INET6)
             return -EAFNOSUPPORT;
         if (addrlen != minimal_addrlen(addr->sa_family))
+            return -EINVAL;
+        return 0;
+    }
+
+    return -EINVAL;
+}
+
+static int netlink_check_addr(int domain, struct sockaddr* addr, size_t addrlen) {
+    if (domain == AF_NETLINK) {
+        if (addr->sa_family != AF_NETLINK)
+            return -EAFNOSUPPORT;
+        if (addrlen != sizeof(struct sockaddr_nl))
             return -EINVAL;
         return 0;
     }
@@ -350,6 +448,31 @@ static size_t inet_copy_addr(int domain, struct sockaddr* saddr, size_t saddr_le
     return len;
 }
 
+static size_t netlink_copy_addr(int domain, struct sockaddr* saddr, size_t saddr_len,
+                             const struct addr_nl* addr) {
+    struct sockaddr_storage ss;
+    struct sockaddr_nl* nl;
+    size_t len = 0;
+
+    switch (domain) {
+        case AF_NETLINK:
+            nl = (struct sockaddr_nl*)&ss;
+            nl->nl_family   = AF_NETLINK;
+            nl->nl_pid      = addr->pid;
+            nl->nl_groups   = addr->groups;
+
+            len = MIN(saddr_len, sizeof(struct sockaddr_nl));
+            break;
+
+        default:
+            __abort(); /* this function must accept only AF_NETLINK */
+    }
+
+    memcpy(saddr, &ss, len);
+
+    return len;
+}
+
 static void inet_save_addr(int domain, struct addr_inet* addr, const struct sockaddr* saddr) {
     if (domain == AF_INET) {
         const struct sockaddr_in* in = (const struct sockaddr_in*)saddr;
@@ -376,6 +499,16 @@ static void inet_save_addr(int domain, struct addr_inet* addr, const struct sock
     }
 }
 
+static void netlink_save_addr(int domain, struct addr_nl* addr, const struct sockaddr* saddr) {
+    if (domain == AF_NETLINK) {
+        const struct sockaddr_nl* nl = (const struct sockaddr_nl*)saddr;
+        addr->pid                    = nl->nl_pid;
+        addr->groups                 = nl->nl_groups;
+        return;
+    }
+}
+
+
 static int create_socket_uri(struct shim_handle* hdl) {
     struct shim_sock_handle* sock = &hdl->info.sock;
 
@@ -396,6 +529,20 @@ static int create_socket_uri(struct shim_handle* hdl) {
         int ret = inet_create_uri(sock->domain, uri_buf, SOCK_URI_SIZE, sock->sock_type,
                                   sock->sock_state, &sock->addr.in.bind, &sock->addr.in.conn,
                                   &uri_len);
+        if (ret < 0)
+            return ret;
+
+        qstrsetstr(&hdl->uri, uri_buf, uri_len);
+        return 0;
+    }
+
+    if (sock->domain == AF_NETLINK) {
+        char uri_buf[SOCK_URI_SIZE];
+        size_t uri_len;
+        int ret = netlink_create_uri(sock->domain, uri_buf, SOCK_URI_SIZE, sock->sock_type, sock->protocol,
+				     sock->sock_state, &sock->addr.nl.bind, &sock->addr.nl.conn,
+				     &uri_len);
+
         if (ret < 0)
             return ret;
 
@@ -493,6 +640,10 @@ long shim_do_bind(int sockfd, struct sockaddr* addr, int _addrlen) {
             goto out;
         inet_save_addr(sock->domain, &sock->addr.in.bind, addr);
         inet_rebase_port(false, sock->domain, &sock->addr.in.bind, true);
+    } else if (sock->domain == AF_NETLINK) {
+        if ((ret = netlink_check_addr(sock->domain, addr, addrlen)) < 0)
+            goto out;
+        netlink_save_addr(sock->domain, &sock->addr.nl.bind, addr);
     }
 
     sock->sock_state = SOCK_BOUND;
@@ -539,6 +690,20 @@ long shim_do_bind(int sockfd, struct sockaddr* addr, int _addrlen) {
             goto out;
 
         inet_rebase_port(true, sock->domain, &sock->addr.in.bind, true);
+    }
+
+    if (sock->domain == AF_NETLINK) {
+        char uri[SOCK_URI_SIZE];
+
+        ret = DkStreamGetName(pal_hdl, uri, sizeof(uri));
+        if (ret < 0) {
+            ret = pal_to_unix_errno(ret);
+            goto out;
+        }
+
+        if ((ret = netlink_parse_addr(sock->domain, sock->sock_type, uri, &sock->addr.nl.bind, NULL)) <
+            0)
+            goto out;
     }
 
     hdl->pal_handle = pal_hdl;
@@ -629,6 +794,57 @@ static int inet_parse_addr(int domain, int type, const char* uri, struct addr_in
         }
     }
 
+    return 0;
+}
+
+static int netlink_parse_addr(int domain, int type, const char* uri, struct addr_nl* bind,
+                           struct addr_nl* conn) {
+    char* protocol_str;
+    char* pid_str;
+    char* groups_str;
+    char* next_str;
+
+    if (domain != AF_NETLINK)
+        return -EINVAL;
+
+    if (!(next_str = strchr(uri, ':')))
+        return -EINVAL;
+    next_str++;
+
+    enum { NETLINK, NETLINKSRV } prefix;
+
+    if (strstartswith(uri, URI_PREFIX_NETLINK))
+        prefix = NETLINK;
+    else if (strstartswith(uri, URI_PREFIX_NETLINK_SRV))
+        prefix = NETLINKSRV;
+    else
+        return -EINVAL;
+
+    if ((prefix == NETLINK || prefix == NETLINKSRV) &&
+        (type != SOCK_RAW) && (type != SOCK_DGRAM))
+        return -EINVAL;
+
+    for (int round = 0; (protocol_str = next_str); round++) {
+        pid_str = strchr(protocol_str, '.');
+        if (!pid_str)
+            return -EINVAL;
+        pid_str++;
+        groups_str = strchr(pid_str, '.');
+        if (!groups_str)
+            return -EINVAL;
+        groups_str++;
+
+        next_str = strchr(groups_str, ':');
+        if (next_str)
+            next_str++;
+
+        struct addr_nl* addr = round ? conn : bind;
+
+        if (addr) {
+            addr->pid = __htons(atoi(pid_str));
+            addr->groups = __htons(atoi(groups_str));
+        }
+    }
     return 0;
 }
 
@@ -776,11 +992,17 @@ long shim_do_connect(int sockfd, struct sockaddr* addr, int _addrlen) {
         pal_handle_updated = true;
     }
 
-    if (sock->domain != AF_UNIX) {
+    if (sock->domain == AF_INET || sock->domain == AF_INET6) {
         if ((ret = inet_check_addr(sock->domain, addr, addrlen)) < 0)
             goto out;
         inet_save_addr(sock->domain, &sock->addr.in.conn, addr);
         inet_rebase_port(false, sock->domain, &sock->addr.in.conn, false);
+    }
+
+    if (sock->domain == AF_NETLINK) {
+        if ((ret = netlink_check_addr(sock->domain, addr, addrlen)) < 0)
+            goto out;
+        netlink_save_addr(sock->domain, &sock->addr.nl.conn, addr);
     }
 
     sock->sock_state = (state == SOCK_BOUND) ? SOCK_BOUNDCONNECTED : SOCK_CONNECTED;
@@ -825,6 +1047,20 @@ long shim_do_connect(int sockfd, struct sockaddr* addr, int _addrlen) {
 
         inet_rebase_port(true, sock->domain, &sock->addr.in.bind, true);
         inet_rebase_port(true, sock->domain, &sock->addr.in.conn, false);
+    }
+
+    if (sock->domain == AF_NETLINK) {
+        char uri[SOCK_URI_SIZE];
+
+        ret = DkStreamGetName(pal_hdl, uri, sizeof(uri));
+        if (ret < 0) {
+            ret = pal_to_unix_errno(ret);
+            goto out;
+        }
+
+        if ((ret = netlink_parse_addr(sock->domain, sock->sock_type, uri, &sock->addr.nl.bind, NULL)) <
+            0)
+            goto out;
     }
 
     hdl->acc_mode = MAY_READ | MAY_WRITE;
@@ -974,8 +1210,27 @@ static int __do_accept(struct shim_handle* hdl, int flags, struct sockaddr* addr
         inet_rebase_port(true, cli_sock->domain, &cli_sock->addr.in.bind, true);
         inet_rebase_port(true, cli_sock->domain, &cli_sock->addr.in.conn, false);
 
-        if (addr)
-            *addrlen = inet_copy_addr(sock->domain, addr, *addrlen, &sock->addr.in.conn);
+	if (addr)
+	    *addrlen = inet_copy_addr(sock->domain, addr, *addrlen, &sock->addr.in.conn);
+    }
+
+    if (sock->domain == AF_NETLINK) {
+        char uri[SOCK_URI_SIZE];
+
+        ret = DkStreamGetName(cli->pal_handle, uri, sizeof(uri));
+        if (ret < 0) {
+            ret = pal_to_unix_errno(ret);
+            goto out_cli;
+        }
+
+        if ((ret = netlink_parse_addr(cli_sock->domain, cli_sock->sock_type, uri,
+                                   &cli_sock->addr.nl.bind, &cli_sock->addr.nl.conn)) < 0)
+            goto out_cli;
+
+        qstrsetstr(&cli->uri, uri, strlen(uri));
+
+	if (addr)
+	    *addrlen = netlink_copy_addr(sock->domain, addr, *addrlen, &sock->addr.nl.conn);
     }
 
     ret = set_new_fd_handle(cli, flags & O_CLOEXEC ? FD_CLOEXEC : 0, NULL);
@@ -1069,7 +1324,8 @@ static ssize_t do_sendmsg(int fd, struct iovec* bufs, int nbufs, int flags,
         goto out_locked;
     }
 
-    if (sock->sock_type == SOCK_DGRAM && sock->sock_state != SOCK_BOUNDCONNECTED &&
+    if ((sock->sock_type == SOCK_DGRAM || sock->sock_type == SOCK_RAW) &&
+        sock->sock_state != SOCK_BOUNDCONNECTED &&
         sock->sock_state != SOCK_CONNECTED) {
         if (!addr) {
             ret = -EDESTADDRREQ;
@@ -1077,7 +1333,8 @@ static ssize_t do_sendmsg(int fd, struct iovec* bufs, int nbufs, int flags,
         }
 
         if (sock->sock_state == SOCK_CREATED && !pal_hdl) {
-            ret = DkStreamOpen(URI_PREFIX_UDP, 0, 0, 0,
+            ret = DkStreamOpen(sock->domain == AF_NETLINK ? URI_PREFIX_NETLINK : URI_PREFIX_UDP,
+                               0, 0, 0,
                                hdl->flags & O_NONBLOCK ? PAL_OPTION_NONBLOCK : 0, &pal_hdl);
             if (ret < 0) {
                 ret = pal_to_unix_errno(ret);
@@ -1099,15 +1356,27 @@ static ssize_t do_sendmsg(int fd, struct iovec* bufs, int nbufs, int flags,
     unlock(&hdl->lock);
 
     if (uri) {
-        struct addr_inet addr_buf;
-        inet_save_addr(sock->domain, &addr_buf, addr);
-        inet_rebase_port(false, sock->domain, &addr_buf, false);
-        size_t prefix_len = static_strlen(URI_PREFIX_UDP);
-        memcpy(uri, URI_PREFIX_UDP, prefix_len + 1);
-        if ((ret = inet_translate_addr(sock->domain, uri + prefix_len, SOCK_URI_SIZE - prefix_len,
-                                       &addr_buf, NULL)) < 0) {
-            lock(&hdl->lock);
-            goto out_locked;
+        if (sock->domain == AF_NETLINK) {
+            struct addr_nl addr_buf;
+            netlink_save_addr(sock->domain, &addr_buf, addr);
+            size_t prefix_len = static_strlen(URI_PREFIX_NETLINK);
+            memcpy(uri, URI_PREFIX_NETLINK, prefix_len + 1);
+            if ((ret = netlink_translate_addr(sock->domain, uri + prefix_len, SOCK_URI_SIZE - prefix_len,
+                                              sock->protocol, &addr_buf, NULL)) < 0) {
+                lock(&hdl->lock);
+                goto out_locked;
+            }
+        } else {
+            struct addr_inet addr_buf;
+            inet_save_addr(sock->domain, &addr_buf, addr);
+            inet_rebase_port(false, sock->domain, &addr_buf, false);
+            size_t prefix_len = static_strlen(URI_PREFIX_UDP);
+            memcpy(uri, URI_PREFIX_UDP, prefix_len + 1);
+            if ((ret = inet_translate_addr(sock->domain, uri + prefix_len, SOCK_URI_SIZE - prefix_len,
+                                           &addr_buf, NULL)) < 0) {
+                lock(&hdl->lock);
+                goto out_locked;
+            }
         }
 
         log_debug("next packet send to %s\n", uri);
@@ -1310,7 +1579,8 @@ static ssize_t do_recvmsg(int fd, struct iovec* bufs, size_t nbufs, int flags,
         goto out_locked;
     }
 
-    if (addr && sock->sock_type == SOCK_DGRAM && sock->sock_state != SOCK_CONNECTED &&
+    if (addr && (sock->sock_type == SOCK_DGRAM || sock->sock_type == SOCK_RAW) &&
+        sock->sock_state != SOCK_CONNECTED &&
         sock->sock_state != SOCK_BOUNDCONNECTED) {
         if (sock->sock_state == SOCK_CREATED) {
             ret = -EINVAL;
@@ -1418,6 +1688,24 @@ static ssize_t do_recvmsg(int fd, struct iovec* bufs, size_t nbufs, int flags,
                     *addrlen = inet_copy_addr(sock->domain, addr, *addrlen, &conn);
                 } else {
                     *addrlen = inet_copy_addr(sock->domain, addr, *addrlen, &sock->addr.in.conn);
+                }
+            }
+
+            if (sock->domain == AF_NETLINK) {
+                if (uri) {
+                    struct addr_nl conn;
+
+                    if ((ret = netlink_parse_addr(sock->domain, sock->sock_type, uri, &conn, NULL))
+                            < 0) {
+                        lock(&hdl->lock);
+                        goto out_locked;
+                    }
+
+                    debug("last packet received from %s\n", uri);
+
+                    *addrlen = netlink_copy_addr(sock->domain, addr, *addrlen, &conn);
+                } else {
+                    *addrlen = netlink_copy_addr(sock->domain, addr, *addrlen, &sock->addr.nl.conn);
                 }
             }
 
@@ -1651,7 +1939,9 @@ long shim_do_getsockname(int sockfd, struct sockaddr* addr, int* addrlen) {
     struct shim_sock_handle* sock = &hdl->info.sock;
     lock(&hdl->lock);
 
-    *addrlen = inet_copy_addr(sock->domain, addr, *addrlen, &sock->addr.in.bind);
+    *addrlen = sock->domain == AF_NETLINK ?
+                   netlink_copy_addr(sock->domain, addr, *addrlen, &sock->addr.nl.bind) :
+                   inet_copy_addr(sock->domain, addr, *addrlen, &sock->addr.in.bind);
 
     unlock(&hdl->lock);
 out:
@@ -1701,7 +1991,9 @@ long shim_do_getpeername(int sockfd, struct sockaddr* addr, int* addrlen) {
         goto out_locked;
     }
 
-    *addrlen = inet_copy_addr(sock->domain, addr, *addrlen, &sock->addr.in.conn);
+    *addrlen = sock->domain == AF_NETLINK ?
+                   netlink_copy_addr(sock->domain, addr, *addrlen, &sock->addr.nl.conn) :
+                   inet_copy_addr(sock->domain, addr, *addrlen, &sock->addr.in.conn);
 out_locked:
     unlock(&hdl->lock);
 out:

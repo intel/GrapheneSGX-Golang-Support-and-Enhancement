@@ -56,12 +56,20 @@ struct sockaddr {
 #define AF_INET6 10
 #endif
 
+#ifndef AF_NETLINK
+#define AF_NETLINK 16
+#endif
+
 #ifndef SOCK_STREAM
 #define SOCK_STREAM 1
 #endif
 
 #ifndef SOCK_DGRAM
 #define SOCK_DGRAM 2
+#endif
+
+#ifndef SOCK_RAW
+#define SOCK_RAW 3
 #endif
 
 #ifndef SOCK_NONBLOCK

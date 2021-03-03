@@ -297,6 +297,8 @@ int toml_sizestring_in(const toml_table_t* root, const char* key, uint64_t defau
 #define URI_TYPE_TCP_SRV  "tcp.srv"
 #define URI_TYPE_UDP      "udp"
 #define URI_TYPE_UDP_SRV  "udp.srv"
+#define URI_TYPE_NETLINK      "netlink"
+#define URI_TYPE_NETLINK_SRV  "netlink.srv"
 #define URI_TYPE_PIPE     "pipe"
 #define URI_TYPE_PIPE_SRV "pipe.srv"
 #define URI_TYPE_DEV      "dev"
@@ -308,6 +310,8 @@ int toml_sizestring_in(const toml_table_t* root, const char* key, uint64_t defau
 #define URI_PREFIX_TCP_SRV  URI_TYPE_TCP_SRV URI_PREFIX_SEPARATOR
 #define URI_PREFIX_UDP      URI_TYPE_UDP URI_PREFIX_SEPARATOR
 #define URI_PREFIX_UDP_SRV  URI_TYPE_UDP_SRV URI_PREFIX_SEPARATOR
+#define URI_PREFIX_NETLINK      URI_TYPE_NETLINK URI_PREFIX_SEPARATOR
+#define URI_PREFIX_NETLINK_SRV  URI_TYPE_NETLINK_SRV URI_PREFIX_SEPARATOR
 #define URI_PREFIX_PIPE     URI_TYPE_PIPE URI_PREFIX_SEPARATOR
 #define URI_PREFIX_PIPE_SRV URI_TYPE_PIPE_SRV URI_PREFIX_SEPARATOR
 #define URI_PREFIX_DEV      URI_TYPE_DEV URI_PREFIX_SEPARATOR

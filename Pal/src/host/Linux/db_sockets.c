@@ -11,6 +11,7 @@
 #include <asm/ioctls.h>
 #include <linux/in.h>
 #include <linux/in6.h>
+#include <linux/netlink.h>
 #include <linux/poll.h>
 #include <linux/time.h>
 #include <linux/types.h>
@@ -49,6 +50,8 @@ static size_t addr_size(const struct sockaddr* addr) {
             return sizeof(struct sockaddr_in);
         case AF_INET6:
             return sizeof(struct sockaddr_in6);
+        case AF_NETLINK:
+            return sizeof(struct sockaddr_nl);
         default:
             return 0;
     }
@@ -135,6 +138,52 @@ inval:
     return -PAL_ERROR_INVAL;
 }
 
+static int nl_parse_uri(char** uri, int* protocol, struct sockaddr* addr, size_t* addrlen) {
+    char* tmp = *uri;
+    char* end;
+    char* pid_str = NULL;
+    char* groups_str = NULL;
+    size_t slen;
+
+    assert(addrlen);
+
+    /* for NETLINK, the address will be in the form of "pf.pid.groups". */
+    struct sockaddr_nl* addr_nl = (struct sockaddr_nl*)addr;
+
+    slen = sizeof(*addr_nl);
+    if (*addrlen < slen)
+        goto inval;
+
+    memset(addr, 0, slen);
+
+    end = strchr(tmp, '.');
+    if (!end)
+        goto inval;
+    *protocol = __htons(atoi(tmp));
+
+    pid_str = end + 1;
+    end = strchr(end, '.');
+    if (!end)
+        goto inval;
+
+    groups_str = end + 1;
+    for (end = groups_str; *end >= '0' && *end <= '9'; end++)
+        ;
+    addr_nl->nl_family = AF_NETLINK;
+    addr_nl->nl_pid    = __htons(atoi(pid_str));
+    addr_nl->nl_groups = __htons(atoi(groups_str));
+
+    *uri = *end ? end + 1 : NULL;
+
+    *addrlen = slen;
+
+    return 0;
+
+inval:
+    return -PAL_ERROR_INVAL;
+}
+
+
 /* create the string of uri from the given socket address */
 static int inet_create_uri(char* buf, size_t buf_size, struct sockaddr* addr, size_t addrlen,
                            size_t* output_len) {
@@ -163,6 +212,32 @@ static int inet_create_uri(char* buf, size_t buf_size, struct sockaddr* addr, si
         len = snprintf(buf, buf_size, "[%04x:%04x:%04x:%04x:%04x:%04x:%04x:%04x]:%u", addr[0],
                        addr[1], addr[2], addr[3], addr[4], addr[5], addr[6], addr[7],
                        __ntohs(addr_in6->sin6_port));
+    } else {
+        return -PAL_ERROR_INVAL;
+    }
+
+    if (len < 0)
+        return len;
+    if ((size_t)len >= buf_size)
+        return -PAL_ERROR_TOOLONG;
+
+    if (output_len)
+        *output_len = (size_t)len;
+    return 0;
+}
+
+static int netlink_create_uri(char* buf, size_t buf_size, int protocol, struct sockaddr* addr, size_t addrlen,
+    size_t* output_len) {
+    int len = 0;
+
+    if (addr->sa_family == AF_NETLINK) {
+        if (addrlen < sizeof(struct sockaddr_nl))
+            return -PAL_ERROR_INVAL;
+
+        struct sockaddr_nl* addr_nl = (struct sockaddr_nl*)addr;
+
+        /* for NETLINK, the address will be in the form of "PF.PID.GROUPS". */
+        len = snprintf(buf, buf_size, "%u.%u.%u", protocol, addr_nl->nl_pid, addr_nl->nl_groups);
     } else {
         return -PAL_ERROR_INVAL;
     }
@@ -210,6 +285,44 @@ static int socket_parse_uri(char* uri, struct sockaddr** bind_addr, size_t* bind
 
     /* if you reach here, it can only be connection address */
     if (!uri || (ret = inet_parse_uri(&uri, *dest_addr, dest_addrlen)) < 0) {
+        *dest_addr    = *bind_addr;
+        *dest_addrlen = *bind_addrlen;
+        *bind_addr    = NULL;
+        *bind_addrlen = 0;
+    }
+
+    return 0;
+}
+
+static int netlink_parse_uri(char* uri, int* protocol, struct sockaddr** bind_addr, size_t* bind_addrlen,
+                            struct sockaddr** dest_addr, size_t* dest_addrlen) {
+    int ret;
+
+    if (!bind_addr && !dest_addr)
+        return 0;
+
+    if (!uri || !(*uri)) {
+        if (bind_addr)
+            *bind_addr = NULL;
+        if (bind_addrlen)
+            *bind_addrlen = 0;
+        if (dest_addr)
+            *dest_addr = NULL;
+        if (dest_addrlen)
+            *dest_addrlen = 0;
+        return 0;
+    }
+
+    /* at least parse uri once */
+    if ((ret = nl_parse_uri(&uri, protocol, bind_addr ? *bind_addr : *dest_addr,
+                              bind_addr ? bind_addrlen : dest_addrlen)) < 0)
+        return ret;
+
+    if (!(bind_addr && dest_addr))
+        return 0;
+
+    /* if you reach here, it can only be connection address */
+    if (!uri || (ret = nl_parse_uri(&uri, protocol, *dest_addr, dest_addrlen)) < 0) {
         *dest_addr    = *bind_addr;
         *dest_addrlen = *bind_addrlen;
         *bind_addr    = NULL;
@@ -271,6 +384,58 @@ static inline PAL_HANDLE socket_create_handle(int type, int fd, int options,
     hdl->sock.tcp_cork       = PAL_FALSE;
     hdl->sock.tcp_keepalive  = PAL_FALSE;
     hdl->sock.tcp_nodelay    = PAL_FALSE;
+    return hdl;
+}
+
+static inline PAL_HANDLE netlink_create_handle(int type, int fd, int protocol, int options,
+                                              struct sockaddr* bind_addr, size_t bind_addrlen,
+                                              struct sockaddr* dest_addr, size_t dest_addrlen) {
+    PAL_HANDLE hdl =
+        malloc(HANDLE_SIZE(sock) + (bind_addr ? bind_addrlen : 0) + (dest_addr ? dest_addrlen : 0));
+
+    if (!hdl)
+        return NULL;
+
+    memset(hdl, 0, sizeof(struct pal_handle));
+    init_handle_hdr(HANDLE_HDR(hdl), type);
+    HANDLE_HDR(hdl)->flags |= RFD(0) | (type != pal_type_netlinksrv ? WFD(0) : 0);
+    hdl->sock.fd = fd;
+    void* addr   = (void*)hdl + HANDLE_SIZE(sock);
+    if (bind_addr) {
+        hdl->sock.bind = (PAL_PTR)addr;
+        memcpy(addr, bind_addr, bind_addrlen);
+        addr += bind_addrlen;
+    } else {
+        hdl->sock.bind = (PAL_PTR)NULL;
+    }
+    if (dest_addr) {
+        hdl->sock.conn = (PAL_PTR)addr;
+        memcpy(addr, dest_addr, dest_addrlen);
+        addr += dest_addrlen;
+    } else {
+        hdl->sock.conn = (PAL_PTR)NULL;
+    }
+
+    hdl->sock.nonblocking = (options & PAL_OPTION_NONBLOCK) ? PAL_TRUE : PAL_FALSE;
+    hdl->sock.linger      = 0;
+
+    if (type == pal_type_netlinksrv) {
+        hdl->sock.receivebuf = 0;
+        hdl->sock.sendbuf    = 0;
+    } else {
+        int ret, val;
+        int len = sizeof(int);
+
+        ret = INLINE_SYSCALL(getsockopt, 5, fd, SOL_SOCKET, SO_RCVBUF, &val, &len);
+        hdl->sock.receivebuf = IS_ERR(ret) ? 0 : val;
+
+        ret = INLINE_SYSCALL(getsockopt, 5, fd, SOL_SOCKET, SO_SNDBUF, &val, &len);
+        hdl->sock.sendbuf = IS_ERR(ret) ? 0 : val;
+    }
+
+    hdl->sock.receivetimeout = 0;
+    hdl->sock.sendtimeout    = 0;
+    hdl->sock.protocol       = protocol;
     return hdl;
 }
 
@@ -623,6 +788,59 @@ failed:
     return ret;
 }
 
+static int netlink_bind(PAL_HANDLE* handle, char* uri, int create, int options) {
+    __UNUSED(create);
+    struct sockaddr_storage buffer;
+    struct sockaddr* bind_addr = (struct sockaddr*)&buffer;
+    size_t bind_addrlen = sizeof(buffer);
+    int ret = 0, protocol, fd = -1;
+
+    if ((ret = netlink_parse_uri(uri, &protocol, &bind_addr, &bind_addrlen, NULL, NULL)) < 0)
+        return ret;
+
+    if (!bind_addr)
+        return -PAL_ERROR_DENIED;
+
+    assert(bind_addrlen == addr_size(bind_addr));
+
+    int sock_options = options & PAL_OPTION_NONBLOCK ? SOCK_NONBLOCK : 0;
+    fd = INLINE_SYSCALL(socket, 3, bind_addr->sa_family, SOCK_RAW | SOCK_CLOEXEC | sock_options,
+                        protocol);
+
+    if (IS_ERR(fd))
+        return -PAL_ERROR_DENIED;
+
+    ret = INLINE_SYSCALL(bind, 3, fd, bind_addr, bind_addrlen);
+
+    if (IS_ERR(ret)) {
+        switch (ERRNO(ret)) {
+            case EADDRINUSE:
+                ret = -PAL_ERROR_STREAMEXIST;
+                goto failed;
+            case EADDRNOTAVAIL:
+                ret = -PAL_ERROR_ADDRNOTEXIST;
+                goto failed;
+            default:
+                ret = unix_to_pal_error(ERRNO(ret));
+                goto failed;
+        }
+    }
+
+    *handle = netlink_create_handle(pal_type_netlinksrv, fd, protocol,
+                                    options, bind_addr, bind_addrlen, NULL, 0);
+
+    if (!(*handle)) {
+        ret = -ENOMEM;
+        goto failed;
+    }
+
+    return 0;
+
+failed:
+    INLINE_SYSCALL(close, 1, fd);
+    return ret;
+}
+
 /* used by 'open' operation of tcp stream for connected socket */
 static int udp_connect(PAL_HANDLE* handle, char* uri, int create, int options) {
     struct sockaddr_storage buffer[2];
@@ -670,6 +888,59 @@ static int udp_connect(PAL_HANDLE* handle, char* uri, int create, int options) {
     }
 
     *handle = socket_create_handle(dest_addr ? pal_type_udp : pal_type_udpsrv, fd, options,
+                                   bind_addr, bind_addrlen, dest_addr, dest_addrlen);
+
+    if (!(*handle)) {
+        ret = -ENOMEM;
+        goto failed;
+    }
+
+    return 0;
+
+failed:
+    INLINE_SYSCALL(close, 1, fd);
+    return ret;
+}
+
+static int netlink_connect(PAL_HANDLE* handle, char* uri, int create, int options) {
+    __UNUSED(create);
+    struct sockaddr_storage buffer[2];
+    struct sockaddr* bind_addr = (struct sockaddr*)&buffer[0];
+    size_t bind_addrlen = sizeof(buffer[0]);
+    struct sockaddr* dest_addr = (struct sockaddr*)&buffer[1];
+    size_t dest_addrlen = sizeof(buffer[1]);
+    int ret, protocol = 0, fd = -1;
+
+    if ((ret = netlink_parse_uri(uri, &protocol, &bind_addr, &bind_addrlen, &dest_addr, &dest_addrlen)) < 0)
+        return ret;
+
+    int sock_options = options & PAL_OPTION_NONBLOCK ? SOCK_NONBLOCK : 0;
+    fd = INLINE_SYSCALL(socket, 3, dest_addr ? dest_addr->sa_family : AF_NETLINK,
+                        SOCK_DGRAM | SOCK_CLOEXEC | sock_options, protocol);
+
+    if (IS_ERR(fd))
+        return -PAL_ERROR_DENIED;
+
+    if (bind_addr) {
+
+        ret = INLINE_SYSCALL(bind, 3, fd, bind_addr, bind_addrlen);
+
+        if (IS_ERR(ret)) {
+            switch (ERRNO(ret)) {
+                case EADDRINUSE:
+                    ret = -PAL_ERROR_STREAMEXIST;
+                    goto failed;
+                case EADDRNOTAVAIL:
+                    ret = -PAL_ERROR_ADDRNOTEXIST;
+                    goto failed;
+                default:
+                    ret = unix_to_pal_error(ERRNO(ret));
+                    goto failed;
+            }
+        }
+    }
+
+    *handle = netlink_create_handle(dest_addr ? pal_type_netlink : pal_type_netlinksrv, fd, protocol, options,
                                    bind_addr, bind_addrlen, dest_addr, dest_addrlen);
 
     if (!(*handle)) {
@@ -741,6 +1012,36 @@ static int64_t udp_receive(PAL_HANDLE handle, uint64_t offset, size_t len, void*
     return bytes;
 }
 
+static int64_t netlink_receive(PAL_HANDLE handle, uint64_t offset, size_t len, void* buf) {
+    if (offset)
+        return -PAL_ERROR_INVAL;
+
+    if (!IS_HANDLE_TYPE(handle, netlink))
+        return -PAL_ERROR_NOTCONNECTION;
+
+    if (handle->sock.fd == PAL_IDX_POISON)
+        return -PAL_ERROR_BADHANDLE;
+
+    struct msghdr hdr;
+    struct iovec iov;
+    iov.iov_base       = buf;
+    iov.iov_len        = len;
+    hdr.msg_name       = NULL;
+    hdr.msg_namelen    = 0;
+    hdr.msg_iov        = &iov;
+    hdr.msg_iovlen     = 1;
+    hdr.msg_control    = NULL;
+    hdr.msg_controllen = 0;
+    hdr.msg_flags      = 0;
+
+    int64_t bytes = INLINE_SYSCALL(recvmsg, 3, handle->sock.fd, &hdr, 0);
+
+    if (IS_ERR(bytes))
+        return unix_to_pal_error(ERRNO(bytes));
+
+    return bytes;
+}
+
 static int64_t udp_receivebyaddr(PAL_HANDLE handle, uint64_t offset, size_t len, void* buf,
                                  char* addr, size_t addrlen) {
     if (offset)
@@ -783,11 +1084,82 @@ static int64_t udp_receivebyaddr(PAL_HANDLE handle, uint64_t offset, size_t len,
     return bytes;
 }
 
+static int64_t netlink_receivebyaddr(PAL_HANDLE handle, uint64_t offset, size_t len, void* buf,
+                                 char* addr, size_t addrlen) {
+    if (offset)
+        return -PAL_ERROR_INVAL;
+
+    if (!IS_HANDLE_TYPE(handle, netlinksrv))
+        return -PAL_ERROR_NOTCONNECTION;
+
+    if (handle->sock.fd == PAL_IDX_POISON)
+        return -PAL_ERROR_BADHANDLE;
+
+    struct sockaddr_storage conn_addr;
+
+    struct msghdr hdr;
+    struct iovec iov;
+    iov.iov_base       = buf;
+    iov.iov_len        = len;
+    hdr.msg_name       = &conn_addr;
+    hdr.msg_namelen    = sizeof(conn_addr);
+    hdr.msg_iov        = &iov;
+    hdr.msg_iovlen     = 1;
+    hdr.msg_control    = NULL;
+    hdr.msg_controllen = 0;
+    hdr.msg_flags      = 0;
+
+    int64_t bytes = INLINE_SYSCALL(recvmsg, 3, handle->sock.fd, &hdr, 0);
+
+    if (IS_ERR(bytes))
+        return unix_to_pal_error(ERRNO(bytes));
+
+    char* addr_uri = strcpy_static(addr, URI_PREFIX_NETLINK, addrlen);
+    if (!addr_uri)
+        return -PAL_ERROR_OVERFLOW;
+
+    int ret = netlink_create_uri(addr_uri, addr + addrlen - addr_uri, handle->sock.protocol,
+                                 (struct sockaddr*)&conn_addr, hdr.msg_namelen, NULL);
+    if (ret < 0)
+        return ret;
+
+    return bytes;
+}
+
 static int64_t udp_send(PAL_HANDLE handle, uint64_t offset, size_t len, const void* buf) {
     if (offset)
         return -PAL_ERROR_INVAL;
 
     if (!IS_HANDLE_TYPE(handle, udp))
+        return -PAL_ERROR_NOTCONNECTION;
+
+    if (handle->sock.fd == PAL_IDX_POISON)
+        return -PAL_ERROR_BADHANDLE;
+
+    struct msghdr hdr;
+    struct iovec iov;
+    iov.iov_base       = (void*)buf;
+    iov.iov_len        = len;
+    hdr.msg_name       = (void*)handle->sock.conn;
+    hdr.msg_namelen    = addr_size((struct sockaddr*)handle->sock.conn);
+    hdr.msg_iov        = &iov;
+    hdr.msg_iovlen     = 1;
+    hdr.msg_control    = NULL;
+    hdr.msg_controllen = 0;
+    hdr.msg_flags      = 0;
+
+    int64_t bytes = INLINE_SYSCALL(sendmsg, 3, handle->sock.fd, &hdr, MSG_NOSIGNAL);
+    if (IS_ERR(bytes))
+        bytes = unix_to_pal_error(ERRNO(bytes));
+
+    return bytes;
+}
+
+static int64_t netlink_send(PAL_HANDLE handle, uint64_t offset, size_t len, const void* buf) {
+    if (offset)
+        return -PAL_ERROR_INVAL;
+
+    if (!IS_HANDLE_TYPE(handle, netlink))
         return -PAL_ERROR_NOTCONNECTION;
 
     if (handle->sock.fd == PAL_IDX_POISON)
@@ -856,6 +1228,81 @@ static int64_t udp_sendbyaddr(PAL_HANDLE handle, uint64_t offset, size_t len, co
         bytes = unix_to_pal_error(ERRNO(bytes));
 
     return bytes;
+}
+
+static int64_t netlink_sendbyaddr(PAL_HANDLE handle, uint64_t offset, size_t len, const void* buf,
+                              const char* addr, size_t addrlen) {
+    int protocol;
+
+    if (offset)
+        return -PAL_ERROR_INVAL;
+
+    if (!IS_HANDLE_TYPE(handle, netlinksrv))
+        return -PAL_ERROR_NOTCONNECTION;
+
+    if (handle->sock.fd == PAL_IDX_POISON)
+        return -PAL_ERROR_BADHANDLE;
+
+    if (!strstartswith(addr, URI_PREFIX_NETLINK))
+        return -PAL_ERROR_INVAL;
+
+    addr += static_strlen(URI_PREFIX_NETLINK);
+    addrlen -= static_strlen(URI_PREFIX_NETLINK);
+
+    char* addrbuf = __alloca(addrlen);
+    memcpy(addrbuf, addr, addrlen);
+
+    struct sockaddr_storage conn_addr;
+    size_t conn_addrlen = sizeof(conn_addr);
+
+    int ret = nl_parse_uri(&addrbuf, &protocol, (struct sockaddr*)&conn_addr, &conn_addrlen);
+    if (ret < 0)
+        return ret;
+
+    struct msghdr hdr;
+    struct iovec iov;
+    iov.iov_base       = (void*)buf;
+    iov.iov_len        = len;
+    hdr.msg_name       = &conn_addr;
+    hdr.msg_namelen    = conn_addrlen;
+    hdr.msg_iov        = &iov;
+    hdr.msg_iovlen     = 1;
+    hdr.msg_control    = NULL;
+    hdr.msg_controllen = 0;
+    hdr.msg_flags      = 0;
+
+    int64_t bytes = INLINE_SYSCALL(sendmsg, 3, handle->sock.fd, &hdr, MSG_NOSIGNAL);
+    if (IS_ERR(bytes))
+        bytes = unix_to_pal_error(ERRNO(bytes));
+
+    return bytes;
+}
+
+static int netlink_open(PAL_HANDLE* hdl, const char* type, const char* uri, int access, int share,
+                    int create, int options) {
+    __UNUSED(access);
+    __UNUSED(share);
+
+    assert(WITHIN_MASK(access,  PAL_ACCESS_MASK));
+    assert(WITHIN_MASK(share,   PAL_SHARE_MASK));
+    assert(WITHIN_MASK(create,  PAL_CREATE_MASK));
+    assert(WITHIN_MASK(options, PAL_OPTION_MASK));
+
+    char buf[PAL_SOCKADDR_SIZE];
+    size_t len = strlen(uri);
+
+    if (len >= PAL_SOCKADDR_SIZE)
+        return -PAL_ERROR_TOOLONG;
+
+    memcpy(buf, uri, len + 1);
+
+    if (!strcmp(type, URI_TYPE_NETLINK_SRV))
+        return netlink_bind(hdl, buf, create, options);
+
+    if (!strcmp(type, URI_TYPE_NETLINK))
+        return netlink_connect(hdl, buf, create, options);
+
+    return -PAL_ERROR_NOTSUPPORT;
 }
 
 static int socket_delete(PAL_HANDLE handle, int access) {
@@ -1062,6 +1509,7 @@ static int socket_getname(PAL_HANDLE handle, char* buffer, size_t count) {
     size_t prefix_len = 0;
     struct sockaddr* bind_addr = NULL;
     struct sockaddr* dest_addr = NULL;
+    int is_netlink = 0;
 
     switch (PAL_GET_TYPE(handle)) {
         case pal_type_tcpsrv:
@@ -1086,6 +1534,19 @@ static int socket_getname(PAL_HANDLE handle, char* buffer, size_t count) {
             bind_addr = (struct sockaddr*)handle->sock.bind;
             dest_addr = (struct sockaddr*)handle->sock.conn;
             break;
+        case pal_type_netlinksrv:
+            prefix_len = static_strlen(URI_PREFIX_NETLINK_SRV);
+            prefix = URI_PREFIX_NETLINK_SRV;
+            bind_addr = (struct sockaddr*)handle->sock.bind;
+            is_netlink = 1;
+            break;
+        case pal_type_netlink:
+            prefix_len = static_strlen(URI_PREFIX_NETLINK);
+            prefix = URI_PREFIX_NETLINK;
+            bind_addr = (struct sockaddr*)handle->sock.bind;
+            dest_addr = (struct sockaddr*)handle->sock.conn;
+            is_netlink = 1;
+            break;
         default:
             return -PAL_ERROR_INVAL;
     }
@@ -1100,7 +1561,10 @@ static int socket_getname(PAL_HANDLE handle, char* buffer, size_t count) {
 
     if (bind_addr) {
         size_t uri_size;
-        ret = inet_create_uri(buffer, count, bind_addr, addr_size(bind_addr), &uri_size);
+        ret = is_netlink ? netlink_create_uri(buffer, count, handle->sock.protocol,
+                                              bind_addr, addr_size(bind_addr), &uri_size) :
+                           inet_create_uri(buffer, count, bind_addr,
+                                           addr_size(bind_addr), &uri_size);
         if (ret < 0) {
             return ret;
         }
@@ -1121,7 +1585,10 @@ static int socket_getname(PAL_HANDLE handle, char* buffer, size_t count) {
         }
 
         size_t uri_size;
-        ret = inet_create_uri(buffer, count, dest_addr, addr_size(dest_addr), &uri_size);
+        ret = is_netlink ? netlink_create_uri(buffer, count, handle->sock.protocol,
+                                              dest_addr, addr_size(dest_addr), &uri_size) :
+                           inet_create_uri(buffer, count, dest_addr,
+                                           addr_size(dest_addr), &uri_size);
         if (ret < 0) {
             return ret;
         }
@@ -1165,4 +1632,24 @@ struct handle_ops g_udpsrv_ops = {
     .close          = &socket_close,
     .attrquerybyhdl = &socket_attrquerybyhdl,
     .attrsetbyhdl   = &socket_attrsetbyhdl,
+};
+
+struct handle_ops g_netlink_ops = {
+    .getname        = &socket_getname,
+    .open           = &netlink_open,
+    .read           = &netlink_receive,
+    .write          = &netlink_send,
+    .delete         = &socket_delete,
+    .close          = &socket_close,
+    .attrquerybyhdl = &socket_attrquerybyhdl,
+};
+
+struct handle_ops g_netlinksrv_ops = {
+    .getname        = &socket_getname,
+    .open           = &netlink_open,
+    .readbyaddr     = &netlink_receivebyaddr,
+    .writebyaddr    = &netlink_sendbyaddr,
+    .delete         = &socket_delete,
+    .close          = &socket_close,
+    .attrquerybyhdl = &socket_attrquerybyhdl,
 };

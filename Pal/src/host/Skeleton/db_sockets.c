@@ -154,3 +154,23 @@ struct handle_ops g_udpsrv_ops = {
     .close          = &socket_close,
     .attrquerybyhdl = &socket_attrquerybyhdl,
 };
+
+struct handle_ops g_netlink_ops = {
+    .getname        = &socket_getname,
+    .open           = &netlink_open,
+    .read           = &netlink_receive,
+    .write          = &netlink_send,
+    .delete         = &socket_delete,
+    .close          = &socket_close,
+    .attrquerybyhdl = &socket_attrquerybyhdl,
+};
+
+struct handle_ops g_netlinksrv_ops = {
+    .getname        = &socket_getname,
+    .open           = &netlink_open,
+    .readbyaddr     = &netlink_receivebyaddr,
+    .writebyaddr    = &netlink_sendbyaddr,
+    .delete         = &socket_delete,
+    .close          = &socket_close,
+    .attrquerybyhdl = &socket_attrquerybyhdl,
+};

@@ -119,6 +119,7 @@ struct shim_pipe_handle {
 
 #define SOCK_STREAM   1
 #define SOCK_DGRAM    2
+#define SOCK_RAW      3
 #define SOCK_NONBLOCK 04000
 #define SOCK_CLOEXEC  02000000
 
@@ -129,10 +130,12 @@ struct shim_pipe_handle {
 #define PF_FILE  PF_LOCAL
 #define PF_INET  2
 #define PF_INET6 10
+#define PF_NETLINK 16
 
 #define AF_UNIX  PF_UNIX
 #define AF_INET  PF_INET
 #define AF_INET6 PF_INET6
+#define AF_NETLINK PF_NETLINK
 
 #define SOCK_URI_SIZE 108
 
@@ -171,6 +174,13 @@ struct shim_sock_handle {
             struct shim_dentry* dentry;
             char name[PIPE_URI_SIZE];
         } un;
+        struct {
+            struct addr_nl {
+                uint32_t pid;
+                uint32_t groups;
+            } bind, conn;
+        } nl;
+
     } addr;
 
     struct shim_sock_option {

@@ -85,6 +85,7 @@ c_executables = \
 	tcp_msg_peek \
 	udp \
 	unix \
+	getaddrinfo \
 	vfork_and_exec \
 	$(c_executables-$(ARCH))
 
