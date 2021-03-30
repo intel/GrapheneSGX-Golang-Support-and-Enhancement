@@ -69,6 +69,51 @@ index ba1257ffabafdf536daee41c1d6afdf6ca61c684..1a35f4b80d9044c9a7866fffaf3ca9bb
  
    if (highest < count) {
      printf "*** errlist.c count %d vs Versions sys_errlist@%s count %d\n", \
+diff --git a/sysdeps/unix/sysv/linux/check_pf.c b/sysdeps/unix/sysv/linux/check_pf.c
+index 36326abe80425ae13b2266ce4eb4907766a222af..50f313880f3af03ed9d5157063881e243d65954c 100644
+--- a/sysdeps/unix/sysv/linux/check_pf.c
++++ b/sysdeps/unix/sysv/linux/check_pf.c
+@@ -180,7 +180,7 @@ make_request (int fd, pid_t pid)
+ 	   NLMSG_OK (nlmh, (size_t) read_len);
+ 	   nlmh = (struct nlmsghdr *) NLMSG_NEXT (nlmh, read_len))
+ 	{
+-	  if (nladdr.nl_pid != 0 || (pid_t) nlmh->nlmsg_pid != pid
++	  if (nladdr.nl_pid != 0
+ 	      || nlmh->nlmsg_seq != req.nlh.nlmsg_seq)
+ 	    continue;
+ 
+diff --git a/sysdeps/unix/sysv/linux/ifaddrs.c b/sysdeps/unix/sysv/linux/ifaddrs.c
+index 32381f54e4e0e10c42c47aed0ebeb1df03bf19af..7af578b67e38685656a3e12fe7a665668f714175 100644
+--- a/sysdeps/unix/sysv/linux/ifaddrs.c
++++ b/sysdeps/unix/sysv/linux/ifaddrs.c
+@@ -187,8 +187,7 @@ __netlink_request (struct netlink_handle *h, int type)
+ 	   NLMSG_OK (nlmh, remaining_len);
+ 	   nlmh = (struct nlmsghdr *) NLMSG_NEXT (nlmh, remaining_len))
+ 	{
+-	  if ((pid_t) nlmh->nlmsg_pid != h->pid
+-	      || nlmh->nlmsg_seq != h->seq)
++	  if (nlmh->nlmsg_seq != h->seq)
+ 	    continue;
+ 
+ 	  ++count;
+@@ -367,7 +366,7 @@ getifaddrs_internal (struct ifaddrs **ifap)
+       for (nlh = nlp->nlh; NLMSG_OK (nlh, size); nlh = NLMSG_NEXT (nlh, size))
+ 	{
+ 	  /* Check if the message is what we want.  */
+-	  if ((pid_t) nlh->nlmsg_pid != nh.pid || nlh->nlmsg_seq != nlp->seq)
++	  if (nlh->nlmsg_seq != nlp->seq)
+ 	    continue;
+ 
+ 	  if (nlh->nlmsg_type == NLMSG_DONE)
+@@ -442,7 +441,7 @@ getifaddrs_internal (struct ifaddrs **ifap)
+ 	  int ifa_index = 0;
+ 
+ 	  /* Check if the message is the one we want */
+-	  if ((pid_t) nlh->nlmsg_pid != nh.pid || nlh->nlmsg_seq != nlp->seq)
++	  if (nlh->nlmsg_seq != nlp->seq)
+ 	    continue;
+ 
+ 	  if (nlh->nlmsg_type == NLMSG_DONE)
 diff --git a/sysdeps/unix/sysv/linux/x86_64/____longjmp_chk.S b/sysdeps/unix/sysv/linux/x86_64/____longjmp_chk.S
 index 8a9f2e1a3c624bb43702009a5e13de872a5031a1..6cdc1a42ac3102c2061dfb336af0f6c9b8726333 100644
 --- a/sysdeps/unix/sysv/linux/x86_64/____longjmp_chk.S
