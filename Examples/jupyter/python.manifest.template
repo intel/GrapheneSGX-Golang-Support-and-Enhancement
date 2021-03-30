@@ -19,7 +19,9 @@ loader.env.LD_LIBRARY_PATH = "$(PYTHONHOME)/lib:/lib:$(ARCH_LIBDIR):/usr/lib:/us
 loader.env.PATH = "$(PYTHONHOME)/bin:/usr/bin:/bin"
 loader.env.PYTHONHOME = "$(PYTHONHOME)"
 loader.env.PYTHONPATH = "$(PYTHONHOME):$(PYTHONHOME)/plat-$(ARCH_LONG):$(PYTHONDISTHOME):$(PYTHONHOME)/lib-dynload"
-loader.env.HOME = "/home/user"
+loader.env.HOME = "."
+
+sys.insecure__allow_eventfd = 1
 
 # Mounted FSes. The following "chroot" FSes mount a part of the host FS into the
 # guest. Other parts of the host FS will not be available in the guest.
@@ -69,7 +71,7 @@ fs.mount.run.uri = "file:/run"
 # Set the virtual memory size of the SGX enclave. For SGX v1, the enclave
 # size must be specified during signing. If Python needs more virtual memory
 # than the enclave size, Graphene will not be able to allocate it.
-sgx.enclave_size = "1G"
+sgx.enclave_size = "8G"
 
 # Set the maximum number of enclave threads. For SGX v1, the number of enclave
 # TCSes must be specified during signing, so the application cannot use more
@@ -77,9 +79,11 @@ sgx.enclave_size = "1G"
 # thread for handling inter-process communication (IPC), and potentially another
 # thread for asynchronous events. Therefore, the actual number of threads that
 # the application can create is (sgx.thread_num - 2).
-sgx.thread_num = 8
+sgx.thread_num = 20
 
 sgx.nonpie_binary = 1
+
+sgx.attestation = 1
 
 # SGX trusted libraries
 
@@ -263,11 +267,11 @@ sgx.trusted_files.pythonhttp120 = "file:$(PYTHONHOME)/encodings/idna.py"
 sgx.trusted_files.pythonhttp121 = "file:$(PYTHONHOME)/stringprep.py"
 
 # User scripts
-sgx.trusted_files.user01 = "file:scripts/benchrun.py"
-sgx.trusted_files.user02 = "file:scripts/dummy-web-server.py"
-sgx.trusted_files.user03 = "file:scripts/fibonacci.py"
-sgx.trusted_files.user04 = "file:scripts/helloworld.py"
-sgx.trusted_files.user05 = "file:scripts/test-http.py"
+# sgx.trusted_files.user01 = "file:scripts/benchrun.py"
+# sgx.trusted_files.user02 = "file:scripts/dummy-web-server.py"
+# sgx.trusted_files.user03 = "file:scripts/fibonacci.py"
+# sgx.trusted_files.user04 = "file:scripts/helloworld.py"
+# sgx.trusted_files.user05 = "file:scripts/test-http.py"
 
 # Python-required etc files
 sgx.trusted_files.mimetypes = "file:/etc/mime.types"

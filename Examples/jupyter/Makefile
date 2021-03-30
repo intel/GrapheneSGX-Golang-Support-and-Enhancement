@@ -9,6 +9,12 @@
 
 GRAPHENEDIR ?= ../..
 
+LOCAL_IKERNEL_DIR := $(HOME)/.local/share/jupyter/kernels
+IKERNEL_NAME_GRA := grapython
+IKERNEL_NAME_SGX := sgxpython
+IKERNEL_SGX_DIR := $(LOCAL_IKERNEL_DIR)/$(IKERNEL_NAME_SGX)
+IKERNEL_GRA_DIR := $(LOCAL_IKERNEL_DIR)/$(IKERNEL_NAME_GRA)
+
 include $(GRAPHENEDIR)/Scripts/Makefile.configs
 
 # Python constants are declared in Makefile.python
@@ -91,6 +97,38 @@ python.token: python.sig
 pal_loader:
 	ln -s $(GRAPHENEDIR)/Runtime/pal_loader $@
 
+$(IKERNEL_GRA_DIR):
+	mkdir -p $(IKERNEL_GRA_DIR)
+
+$(IKERNEL_SGX_DIR):
+	mkdir -p $(IKERNEL_SGX_DIR)
+
+.PHONY: FORCE
+FORCE:
+
+ifeq ($(SGX),1)
+kernel.json: kernel.json.template FORCE
+	(sed -e 's|$$(IKERNEL_NAME)|'"$(IKERNEL_NAME_SGX)"'|g' \
+	     -e 's|$$(PAL_LOADER)|'"$(realpath $(GRAPHENEDIR))/Runtime/pal-Linux-SGX"'|g' \
+	     -e 's|$$(PAL_LIB)|'"$(realpath $(GRAPHENEDIR))/Pal/src/host/Linux-SGX/libpal.so"'|g' \
+	     $<) > $@
+else
+kernel.json: kernel.json.template FORCE
+	(sed -e 's|$$(IKERNEL_NAME)|'"$(IKERNEL_NAME_GRA)"'|g' \
+	     -e 's|$$(PAL_LOADER)|'"$(realpath $(GRAPHENEDIR))/Runtime/pal-Linux"'|g' \
+	     -e 's|$$(PAL_LIB)|'"$(realpath $(GRAPHENEDIR))/Pal/src/host/Linux/libpal.so"'|g' \
+	     $<) > $@
+endif
+
+.PHONY: deploy
+ifeq ($(SGX),1)
+deploy: kernel.json python.manifest.sgx python.sig python.token | $(IKERNEL_SGX_DIR)
+	cp $^ $(IKERNEL_SGX_DIR)
+else
+deploy: kernel.json python.manifest | $(IKERNEL_GRA_DIR)
+	cp $^ $(IKERNEL_GRA_DIR)
+endif
+
 .PHONY: check
 check: all
 	./run-tests.sh > OUTPUT_TEST 2> /dev/null
@@ -103,6 +141,9 @@ check: all
 clean:
 	$(RM) *.manifest *.manifest.sgx *.token *.sig pal_loader OUTPUT* *.PID
 	$(RM) -r scripts/__pycache__
+	$(RM) kernel.json
+	$(RM) -r $(IKERNEL_GRA_DIR)
+	$(RM) -r $(IKERNEL_SGX_DIR)
 
 .PHONY: distclean
 distclean: clean

@@ -86,6 +86,7 @@ c_executables = \
 	udp \
 	unix \
 	getaddrinfo \
+    getifaddrs \
 	vfork_and_exec \
 	$(c_executables-$(ARCH))
 

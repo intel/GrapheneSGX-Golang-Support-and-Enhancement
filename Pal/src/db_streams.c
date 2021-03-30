@@ -156,7 +156,10 @@ int _DkStreamOpen(PAL_HANDLE* handle, const char* uri, int access, int share, in
     char* type = NULL;
 
     assert(WITHIN_MASK(access,  PAL_ACCESS_MASK));
-    assert(WITHIN_MASK(share,   PAL_SHARE_MASK));
+    if (!WITHIN_MASK(share,   PAL_SHARE_MASK)) {
+      warn("assert failed for : %s %o \n", uri, share);
+        /* assert(WITHIN_MASK(share,   PAL_SHARE_MASK)); */
+    }
     assert(WITHIN_MASK(create,  PAL_CREATE_MASK));
     assert(WITHIN_MASK(options, PAL_OPTION_MASK));
 

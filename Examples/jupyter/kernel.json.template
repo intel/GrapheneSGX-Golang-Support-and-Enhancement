@@ -1,0 +1,14 @@
+{
+ "argv": [
+  "$(PAL_LOADER)",
+  "$(PAL_LIB)",
+  "init",
+  "python",
+  "-m",
+  "ipykernel_launcher",
+  "-f",
+  "{connection_file}"
+ ],
+ "display_name": "$(IKERNEL_NAME)",
+ "language": "python"
+}
